@@ -217,6 +217,8 @@ mod term {
     use crossterm::{QueueableCommand, style, cursor, event::{ poll, read, KeyModifiers }, terminal::{enable_raw_mode, self, disable_raw_mode}};
     use strip_ansi_escapes::strip_str;
 
+    use super::{char_size, char_start};
+
     struct ReadCtx {
         history: Vec<String>,
         allowed_chars: Option<HashSet<char>>,
@@ -230,6 +232,7 @@ mod term {
         prompt: String,
         prompt_len: usize,
         cursor_idx: usize,
+        whole_cursor_idx: usize,
     }
 
     pub struct StdioTerm {
@@ -251,7 +254,7 @@ mod term {
             ensure_raw();
             let truncated = strip_str(&prompt).len();
             Self {
-                print: Mutex::new(PrintCtx { buffer: String::new(), prompt_len: truncated, prompt, cursor_idx: 0 }),
+                print: Mutex::new(PrintCtx { buffer: String::new(), prompt_len: truncated, prompt, cursor_idx: 0, whole_cursor_idx: 0 }),
                 read: Mutex::new(ReadCtx { history: Vec::with_capacity(hist_cap), allowed_chars, hist_idx: 0, insert_mode: true, interm_hist_buffer: String::new() }),
             }
         }
@@ -267,7 +270,7 @@ mod term {
             lock.queue(cursor::MoveToColumn(0));
             lock.queue(style::Print(&print_ctx.prompt));
             lock.queue(style::Print(&print_ctx.buffer));
-            lock.queue(cursor::MoveToColumn(print_ctx.prompt_len as u16 + print_ctx.cursor_idx as u16));
+            lock.queue(cursor::MoveToColumn(print_ctx.prompt_len as u16 + print_ctx.whole_cursor_idx as u16));
             lock.flush();
         }
 
@@ -281,7 +284,7 @@ mod term {
             lock.queue(cursor::MoveToColumn(0));
             lock.queue(style::Print(&print_ctx.prompt));
             lock.queue(style::Print(&print_ctx.buffer));
-            lock.queue(cursor::MoveToColumn(print_ctx.prompt_len as u16 + print_ctx.cursor_idx as u16));
+            lock.queue(cursor::MoveToColumn(print_ctx.prompt_len as u16 + print_ctx.whole_cursor_idx as u16));
             lock.flush();
         }
 
@@ -298,15 +301,19 @@ mod term {
                                     let mut print_ctx = self.print.lock().unwrap();
                                     match ev.code {
                                         crossterm::event::KeyCode::Backspace => {
-                                            if print_ctx.cursor_idx != 0 && print_ctx.buffer.pop().is_some() {
-                                                print_ctx.cursor_idx -= 1;
-                                                let mut lock = std::io::stdout().lock();
-                                                lock.queue(cursor::MoveToColumn(0));
-                                                lock.queue(style::Print(&print_ctx.prompt));
-                                                lock.queue(style::Print(&print_ctx.buffer));
-                                                lock.queue(style::Print(" "));
-                                                lock.queue(cursor::MoveToColumn(print_ctx.prompt_len as u16 + print_ctx.cursor_idx as u16));
-                                                lock.flush();
+                                            if print_ctx.cursor_idx != 0 {
+                                                if let Some(chr) = print_ctx.buffer.pop() {
+                                                    let size = char_size(chr);
+                                                    print_ctx.cursor_idx -= size;
+                                                    print_ctx.whole_cursor_idx -= 1;
+                                                    let mut lock = std::io::stdout().lock();
+                                                    lock.queue(cursor::MoveToColumn(0));
+                                                    lock.queue(style::Print(&print_ctx.prompt));
+                                                    lock.queue(style::Print(&print_ctx.buffer));
+                                                    lock.queue(style::Print(" "));
+                                                    lock.queue(cursor::MoveToColumn(print_ctx.prompt_len as u16 + print_ctx.whole_cursor_idx as u16));
+                                                    lock.flush();
+                                                }
                                             }
                                         },
                                         crossterm::event::KeyCode::Enter => {
@@ -315,6 +322,7 @@ mod term {
                                             lock.queue(style::Print(&print_ctx.prompt));
                                             lock.flush();
                                             print_ctx.cursor_idx = 0;
+                                            print_ctx.whole_cursor_idx = 0;
 
                                             read_ctx.interm_hist_buffer = String::new();
 
@@ -340,7 +348,9 @@ mod term {
                                             if print_ctx.cursor_idx == 0 {
                                                 continue;
                                             }
-                                            print_ctx.cursor_idx -= 1;
+                                            let size = char_size(print_ctx.buffer.as_bytes()[print_ctx.cursor_idx as usize - 1] as char);
+                                            print_ctx.cursor_idx -= size;
+                                            print_ctx.whole_cursor_idx -= 1;
                                             std::io::stdout().queue(cursor::MoveLeft(1));
                                             std::io::stdout().flush();
                                         },
@@ -348,7 +358,9 @@ mod term {
                                             if print_ctx.buffer.len() == print_ctx.cursor_idx {
                                                 continue;
                                             }
-                                            print_ctx.cursor_idx += 1;
+                                            let size = char_size(print_ctx.buffer.as_bytes()[print_ctx.cursor_idx as usize] as char);
+                                            print_ctx.cursor_idx += size;
+                                            print_ctx.whole_cursor_idx += 1;
                                             std::io::stdout().queue(cursor::MoveRight(1));
                                             std::io::stdout().flush();
                                         },
@@ -363,6 +375,7 @@ mod term {
                                                 read_ctx.interm_hist_buffer = prev;
                                             }
                                             print_ctx.cursor_idx = print_ctx.buffer.len();
+                                            print_ctx.whole_cursor_idx = print_ctx.buffer.chars().count();
                                             let mut lock = std::io::stdout().lock();
                                             lock.queue(cursor::MoveToColumn(0));
                                             lock.queue(style::Print(" ".repeat(print_ctx.prompt_len + buf_len)));
@@ -402,13 +415,14 @@ mod term {
                                                 continue;
                                             }
                                             let cursor = print_ctx.cursor_idx;
+                                            let cursor = char_start(&print_ctx.buffer, cursor);
                                             print_ctx.buffer.remove(cursor);
                                             let mut lock = std::io::stdout().lock();
                                             lock.queue(cursor::MoveToColumn(0));
                                             lock.queue(style::Print(&print_ctx.prompt));
                                             lock.queue(style::Print(&print_ctx.buffer));
                                             lock.queue(style::Print(" "));
-                                            lock.queue(cursor::MoveToColumn(print_ctx.prompt_len as u16 + print_ctx.cursor_idx as u16));
+                                            lock.queue(cursor::MoveToColumn(print_ctx.prompt_len as u16 + print_ctx.whole_cursor_idx as u16));
                                             lock.flush();
                                         },
                                         crossterm::event::KeyCode::Insert => {
@@ -434,13 +448,14 @@ mod term {
                                             if !read_ctx.insert_mode && print_ctx.cursor_idx != print_ctx.buffer.len() {
                                                 print_ctx.buffer.remove(cursor);
                                             }
-                                            print_ctx.buffer.insert(cursor, chr); // FIXME: make this work for multibyte characters!
-                                            print_ctx.cursor_idx += 1;
+                                            print_ctx.buffer.insert(cursor, chr);
+                                            print_ctx.cursor_idx += char_size(chr);
+                                            print_ctx.whole_cursor_idx += 1;
                                             let mut lock = std::io::stdout().lock();
                                             lock.queue(cursor::MoveToColumn(0));
                                             lock.queue(style::Print(&print_ctx.prompt));
                                             lock.queue(style::Print(&print_ctx.buffer));
-                                            lock.queue(cursor::MoveToColumn(print_ctx.prompt_len as u16 + print_ctx.cursor_idx as u16));
+                                            lock.queue(cursor::MoveToColumn(print_ctx.prompt_len as u16 + print_ctx.whole_cursor_idx as u16));
                                             lock.flush();
                                         },
                                         crossterm::event::KeyCode::Null => {},
@@ -475,10 +490,11 @@ mod term {
                             let cursor = print_ctx.cursor_idx;
                             print_ctx.buffer.insert_str(cursor, paste.as_str());
                             print_ctx.cursor_idx += paste.len();
+                            print_ctx.whole_cursor_idx += 1;
                             lock.queue(cursor::MoveToColumn(0));
                             lock.queue(style::Print(&print_ctx.prompt));
                             lock.queue(style::Print(&print_ctx.buffer));
-                            lock.queue(cursor::MoveToColumn(print_ctx.prompt_len as u16 + print_ctx.cursor_idx as u16));
+                            lock.queue(cursor::MoveToColumn(print_ctx.prompt_len as u16 + print_ctx.whole_cursor_idx as u16));
                             lock.flush();
                         },
                         crossterm::event::Event::Resize(_, _) => {},
@@ -489,4 +505,44 @@ mod term {
 
     }
 
+}
+
+#[inline]
+fn char_start(src: &str, mut idx: usize) -> usize {
+    const HIGH_BIT: u8 = 1 << 7;
+    const DIFF_BIT: u8 = 1 << 6;
+
+    loop {
+        let raw = src.as_bytes()[idx];
+        // for single byte chars
+        if raw & HIGH_BIT == 0 {
+            return idx;
+        }
+        // check if we reached the beginning
+        if raw & DIFF_BIT != 0 {
+            return idx;
+        }
+        idx -= 1;
+    }
+}
+
+#[inline]
+fn char_size(chr: char) -> usize {
+    let chr = chr as u32;
+    if chr <= 0x00007F {
+        1
+    } else if chr <= 0x0007FF {
+        2
+    } else if chr <= 0x00FFFF {
+        3
+    } else {
+        4
+    }
+    // ((chr as u32).trailing_ones() as usize).max(1)
+}
+
+#[inline]
+fn full_char_size(src: &str, idx: usize) -> usize {
+    let start = char_start(src, idx);
+    char_size(src.as_bytes()[start] as char)
 }
