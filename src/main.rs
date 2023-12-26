@@ -88,7 +88,7 @@ fn main() -> anyhow::Result<()> {
                             if let Some((left, right)) = s.split_once(cfg.kv_seperator) {
                                 let left = left.trim();
                                 let right = right.trim();
-                                (left.split(',').map(|s| s.to_owned()).collect::<Vec<_>>(), right.split(',').map(|s| s.to_owned()).collect::<Vec<_>>())
+                                (left.split(',').map(|s| s.trim().to_owned()).collect::<Vec<_>>(), right.split(',').map(|s| s.trim().to_owned()).collect::<Vec<_>>())
                             } else {
                                 if !cfg.ignore_errors {
                                     err = true;
@@ -182,7 +182,6 @@ impl CommandImpl for CmdSets {
     type CTX = Arc<TrainingCtx>;
 
     fn execute(&self, ctx: &Self::CTX, _input: &[&str]) -> anyhow::Result<()> {
-
         for set in ctx.sets.iter() {
             ctx.cmd_line.println(&format!("Found {}: {:?}", set.1.name, set.1.kind)).unwrap();
         }
@@ -291,11 +290,11 @@ impl FallbackHandler for InputFallback {
     fn handle(&self, input: String, window: &Window, ctx: &Arc<TrainingCtx>) -> anyhow::Result<bool> {
         let mut learn_instance = ctx.learn_instance.lock().unwrap();
         if let Some(learn_instance) = learn_instance.as_mut() {
-            if learn_instance.curr_word.contains(&input) {
-                window.println(&format!("{} is correct, among others {:?}", input, learn_instance.curr_val).green());
+            if learn_instance.curr_word.contains(&input.to_lowercase()) {
+                window.println(&format!("{} is correct, among others {}", input, learn_instance.curr_val).green());
                 learn_instance.success += 1;
             } else {
-                window.println(&format!("{} is wrong, the correct answer is {:?}", input, learn_instance.curr_val).red());
+                window.println(&format!("{} is wrong, the correct answer is {}", input, learn_instance.curr_val).red());
                 learn_instance.failed += 1;
             }
             let word = ctx.sets.get(&learn_instance.set).unwrap().pick_word();
@@ -303,7 +302,7 @@ impl FallbackHandler for InputFallback {
                 let mut prompt = String::new();
                 for key in word.0.iter() {
                     prompt.push_str(key);
-                    prompt.push_str(" ,");
+                    prompt.push_str(", ");
                 }
                 prompt.pop();
                 prompt.pop();

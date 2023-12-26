@@ -1,4 +1,4 @@
-use std::fmt::Debug;
+use std::fmt::{Debug, Display, Write};
 
 use rand::Rng;
 use serde_derive::{Deserialize, Serialize};
@@ -88,10 +88,32 @@ impl Set {
 
 }
 
-#[derive(Debug)]
 pub enum WordValue {
     Order(usize),
     Value(Vec<String>, Amount),
+}
+
+impl Display for WordValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            WordValue::Order(id) => f.write_str(id.to_string().as_str()),
+            WordValue::Value(vals, amount) => {
+                let mut iter = vals.iter();
+                f.write_char('\"')?;
+                f.write_str(iter.next().unwrap())?;
+                for val in iter {
+                    f.write_str("\", \"")?;
+                    f.write_str(val)?;
+                }
+                /*f.write_str("\" | ")?;
+                f.write_str(match amount {
+                    Amount::All => "All",
+                    Amount::Any => "Any",
+                })?;*/
+                Ok(())
+            },
+        }
+    }
 }
 
 #[derive(Clone)]
