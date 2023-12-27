@@ -258,7 +258,7 @@ mod term {
 
         pub fn new(prompt: String, allowed_chars: Option<HashSet<char>>, hist_cap: usize) -> Self {
             ensure_raw();
-            let truncated = strip_str(&prompt).len();
+            let truncated = strip_str(&prompt).chars().count();
             Self {
                 print: Mutex::new(PrintCtx { buffer: String::new(), prompt_len: truncated, prompt, cursor_idx: 0, whole_cursor_idx: 0 }),
                 read: Mutex::new(ReadCtx { history: Vec::with_capacity(hist_cap), allowed_chars, hist_idx: 0, insert_mode: true, interm_hist_buffer: String::new() }),
@@ -266,7 +266,7 @@ mod term {
         }
 
         pub fn set_prompt(&self, prompt: String) {
-            let truncated = strip_str(&prompt).len();
+            let truncated = strip_str(&prompt).chars().count();
             let mut print_ctx = self.print.lock().unwrap();
             print_ctx.prompt = prompt;
             print_ctx.prompt_len = truncated;

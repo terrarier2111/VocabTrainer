@@ -290,11 +290,15 @@ impl FallbackHandler for InputFallback {
     fn handle(&self, input: String, window: &Window, ctx: &Arc<TrainingCtx>) -> anyhow::Result<bool> {
         let mut learn_instance = ctx.learn_instance.lock().unwrap();
         if let Some(learn_instance) = learn_instance.as_mut() {
-            if learn_instance.curr_word.contains(&input.to_lowercase()) {
-                window.println(&format!("{} is correct, among others {}", input, learn_instance.curr_val).green());
+            if learn_instance.curr_val.matches(input.trim()) {
+                if learn_instance.curr_val.has_multiple_solutions() {
+                    window.println(&format!("\"{}\" is correct, among others {}", input, learn_instance.curr_val).green());
+                } else {
+                    window.println(&format!("\"{}\" is correct", input).green());
+                }
                 learn_instance.success += 1;
             } else {
-                window.println(&format!("{} is wrong, the correct answer is {}", input, learn_instance.curr_val).red());
+                window.println(&format!("\"{}\" is wrong, correct answers are {}", input, learn_instance.curr_val).red());
                 learn_instance.failed += 1;
             }
             let word = ctx.sets.get(&learn_instance.set).unwrap().pick_word();

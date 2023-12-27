@@ -93,6 +93,29 @@ pub enum WordValue {
     Value(Vec<String>, Amount),
 }
 
+impl WordValue {
+
+    pub fn matches(&self, raw: &str) -> bool {
+        match self {
+            WordValue::Order(num) => raw.parse::<usize>().map(|input| input == *num).unwrap_or(false),
+            WordValue::Value(val, amount) => {
+                match amount {
+                    Amount::All => todo!(),
+                    Amount::Any => val.iter().any(|val| val.eq_ignore_ascii_case(raw)),
+                }
+            },
+        }
+    }
+
+    pub fn has_multiple_solutions(&self) -> bool {
+        match self {
+            WordValue::Order(_) => false,
+            WordValue::Value(vals, _) => vals.len() > 1,
+        }
+    }
+
+}
+
 impl Display for WordValue {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -105,6 +128,7 @@ impl Display for WordValue {
                     f.write_str("\", \"")?;
                     f.write_str(val)?;
                 }
+                f.write_char('\"')?;
                 /*f.write_str("\" | ")?;
                 f.write_str(match amount {
                     Amount::All => "All",
