@@ -245,7 +245,7 @@ impl CommandImpl for CmdLearn {
                     let mut prompt = String::new();
                     for key in initial.0.iter() {
                         prompt.push_str(key);
-                        prompt.push_str(" ,");
+                        prompt.push_str(", ");
                     }
                     prompt.pop();
                     prompt.pop();

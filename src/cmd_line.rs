@@ -39,17 +39,15 @@ impl CmdLineInterface {
         self.windows.write().unwrap().push(Arc::new(window));
         let mut lock = std::io::stdout().lock();
         lock.queue(terminal::EnterAlternateScreen);
-        lock.queue(cursor::MoveToColumn(0));
         lock.flush();
+        self.windows.read().unwrap().last().unwrap().reapply_prompt();
     }
 
     pub fn pop_screen(&self) -> Option<Arc<Window>> {
         let mut windows = self.windows.write().unwrap();
         if windows.len() > 1 {
             let mut lock = std::io::stdout().lock();
-            lock.queue(cursor::MoveToColumn(0));
             lock.queue(terminal::LeaveAlternateScreen);
-            lock.queue(cursor::MoveToColumn(0));
             lock.flush();
             return windows.pop();
         }
@@ -86,6 +84,7 @@ impl CmdLineInterface {
                     let mut windows = self.windows.write().unwrap();
                     if windows.len() > 1 {
                         windows.pop();
+                        windows.last().unwrap().reapply_prompt();
                     }
                 },
             }
@@ -144,6 +143,10 @@ impl Window {
 
     pub fn set_prompt(&self, prompt: String) {
         self.term.set_prompt(prompt);
+    }
+
+    pub fn reapply_prompt(&self) {
+        self.term.reapply_prompt();
     }
 
     #[inline(always)]
@@ -246,6 +249,9 @@ mod term {
             return;
         }
         enable_raw_mode().unwrap();
+        let mut lock = std::io::stdout().lock();
+        lock.queue(terminal::LeaveAlternateScreen);
+        lock.flush();
     }
 
     impl StdioTerm {
@@ -264,13 +270,22 @@ mod term {
             let mut print_ctx = self.print.lock().unwrap();
             print_ctx.prompt = prompt;
             print_ctx.prompt_len = truncated;
+            self.reapply_prompt_inner(&print_ctx.prompt, &print_ctx.buffer, print_ctx.prompt_len as u16 + print_ctx.whole_cursor_idx as u16);
+        }
+
+        pub fn reapply_prompt(&self) {
+            let mut print_ctx = self.print.lock().unwrap();
+            self.reapply_prompt_inner(&print_ctx.prompt, &print_ctx.buffer, print_ctx.prompt_len as u16 + print_ctx.whole_cursor_idx as u16);
+        }
+
+        fn reapply_prompt_inner(&self, prompt: &String, buffer: &String, column: u16) {
             let mut lock = std::io::stdout().lock();
             lock.queue(cursor::MoveToColumn(0));
             lock.queue(terminal::Clear(terminal::ClearType::UntilNewLine));
             lock.queue(cursor::MoveToColumn(0));
-            lock.queue(style::Print(&print_ctx.prompt));
-            lock.queue(style::Print(&print_ctx.buffer));
-            lock.queue(cursor::MoveToColumn(print_ctx.prompt_len as u16 + print_ctx.whole_cursor_idx as u16));
+            lock.queue(style::Print(prompt));
+            lock.queue(style::Print(buffer));
+            lock.queue(cursor::MoveToColumn(column));
             lock.flush();
         }
 
