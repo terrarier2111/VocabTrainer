@@ -193,7 +193,7 @@ expenditure = Aufwand
 to denote = bezeichnen, bedeuten, kennzeichnen
 to shove = schieben, stoßen, schubsen
 to restrain = zurückhalten, unterdrücken
-imminent = unmittelbar bevorstehend
+imminent = (unmittelbar) bevorstehend
 prospect = the possibility or likelihood of some future event occurring <there was no prospect of a reconciliation> = Aussicht
 indecisive = unentschlossen
 brevity = Kürze
@@ -437,7 +437,7 @@ reproach = Vorwurf
 to reproach sb = jmd. Vorwürfe machen
 indolent = faul, träge
 ineffable = unbeschreiblich, unsagbar
-to radiate = ausstrahlen
+to radiate = ausstrahlen, strahlen, abgeben
 brawny = stark, muskulös
 fuzzy = unscharf
 indurate

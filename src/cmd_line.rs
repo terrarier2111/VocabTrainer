@@ -249,9 +249,6 @@ mod term {
             return;
         }
         enable_raw_mode().unwrap();
-        let mut lock = std::io::stdout().lock();
-        lock.queue(terminal::LeaveAlternateScreen);
-        lock.flush();
     }
 
     impl StdioTerm {
@@ -447,6 +444,9 @@ mod term {
                                         crossterm::event::KeyCode::Char(chr) => {
                                             if chr == 'c' && ev.modifiers.contains(KeyModifiers::CONTROL) {
                                                 let mut lock = std::io::stdout().lock();
+                                                if can_leave {
+                                                    lock.queue(terminal::LeaveAlternateScreen);
+                                                }
                                                 lock.queue(terminal::ScrollUp(1));
                                                 lock.queue(cursor::MoveToColumn(0));
                                                 lock.flush();

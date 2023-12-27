@@ -22,9 +22,7 @@ fn dir() -> PathBuf {
 
 fn main() -> anyhow::Result<()> {
     let dir = dir();
-    println!("dir: {:?}", dir);
     std::fs::create_dir_all(&dir)?;
-    println!("got dir!");
     let mut sets = vec![];
     for set in dir.read_dir().unwrap() {
         let set = set.unwrap();
@@ -210,7 +208,7 @@ impl CommandImpl for CmdSetup {
                 expected_amount: Amount::Any,
             }),
             meta: LearnSetMeta {},
-            kv_seperator: ':',
+            kv_seperator: '=',
             ignore_errors: false,
         }).unwrap().as_bytes()).unwrap();
         ctx.cmd_line.println("Created default config");
@@ -265,8 +263,7 @@ impl CommandImpl for CmdLearn {
                 return Ok(());
             }
         }
-        todo!()
-        // return Err(());
+        return Err(anyhow::Error::from(SetDoesNotExistsError(set_name)));
     }
 }
 

@@ -96,12 +96,63 @@ pub enum WordValue {
 impl WordValue {
 
     pub fn matches(&self, raw: &str) -> bool {
+        fn matches_past_braces(raw: &str, val: &str) -> bool {
+            let val_chars = val.chars();
+            let mut raw_chars = raw.chars();
+            let mut open = 0;
+            let mut last_skipped = false;
+            let mut matches = true;
+            for chr in val_chars {
+                if chr == '(' {
+                    open += 1;
+                    continue;
+                }
+                if chr == ')' && open != 0 {
+                    open -= 1;
+                    continue;
+                }
+                if open != 0 {
+                    last_skipped = true;
+                    continue;
+                }
+                if chr.is_whitespace() && last_skipped {
+                    continue;
+                }
+                last_skipped = false;
+                matches = raw_chars.next().map(|r_chr| chr.eq_ignore_ascii_case(&r_chr)).unwrap_or(false);
+            }
+            matches
+        }
+
+        fn matches_in_braces(raw: &str, val: &str) -> bool {
+            let val_chars = val.chars();
+            let mut raw_chars = raw.chars();
+            let mut matches = true;
+            for chr in val_chars {
+                if chr == '(' {
+                    continue;
+                }
+                if chr == ')' {
+                    continue;
+                }
+                matches = raw_chars.next().map(|r_chr| chr.eq_ignore_ascii_case(&r_chr)).unwrap_or(false);
+            }
+            matches
+        }
+
         match self {
             WordValue::Order(num) => raw.parse::<usize>().map(|input| input == *num).unwrap_or(false),
             WordValue::Value(val, amount) => {
                 match amount {
                     Amount::All => todo!(),
-                    Amount::Any => val.iter().any(|val| val.eq_ignore_ascii_case(raw)),
+                    Amount::Any => val.iter().any(|val| val.eq_ignore_ascii_case(raw) || {
+                        if val.contains('(') && val.contains(')') {
+                            // this matching allows "just in time" or "in time" for this given value "(just) in time"
+                            matches_past_braces(raw, val) || matches_in_braces(raw, val)
+                        } else {
+                            false
+                        }
+                    }),
                 }
             },
         }
