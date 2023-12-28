@@ -96,6 +96,7 @@ pub enum WordValue {
 impl WordValue {
 
     pub fn matches(&self, raw: &str) -> bool {
+        // FIXME: support multiple braces!
         fn matches_past_braces(raw: &str, val: &str) -> bool {
             let val_chars = val.chars();
             let mut raw_chars = raw.chars();

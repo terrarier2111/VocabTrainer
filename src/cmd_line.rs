@@ -1,5 +1,4 @@
 use anyhow::Error;
-use colored::ColoredString;
 use crossterm::{QueueableCommand, terminal, cursor};
 use std::collections::{HashMap, HashSet};
 use std::fmt::{Display, Formatter};
@@ -15,8 +14,6 @@ use self::term::StdioTerm;
 // This module is mainly used for debugging purposes
 
 // FIXME: maybe add tab completion
-
-// lock.queue(crossterm::terminal::EnterAlternateScreen);
 
 enum Op {
     Pop,
@@ -165,7 +162,7 @@ pub trait FallbackHandler {
     fn handle(&self, input: String, window: &Window, ctx: &Arc<TrainingCtx>) -> anyhow::Result<bool>;
 }
 
-pub struct PrintFallback(pub ColoredString);
+pub struct PrintFallback(pub String);
 
 impl FallbackHandler for PrintFallback {
     fn handle(&self, input: String, window: &Window, ctx: &Arc<TrainingCtx>) -> anyhow::Result<bool> {

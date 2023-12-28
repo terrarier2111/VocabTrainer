@@ -4,8 +4,8 @@ use std::{io::Write, fs, sync::{Arc, Mutex}, collections::HashMap, ops::Deref, e
 
 use cli_core::CommandImpl;
 use cmd_line::{Window, CmdLineInterface, FallbackHandler};
-use colored::{Colorize, ColoredString};
 use config::{LearnSetConfig, Set, WordValue};
+use crossterm::style::Stylize;
 use utils::{input, count_occourances};
 
 use crate::{cmd_line::{CLIBuilder, PrintFallback}, config::{LearnSetMeta, Questioning, Amount, Direction}, cli_core::{CommandBuilder, CommandParamTy, CmdParamStrConstraints, UsageBuilder, CommandParam}};
@@ -123,7 +123,7 @@ fn main() -> anyhow::Result<()> {
                 name: "set".to_string(),
                 ty: CommandParamTy::String(CmdParamStrConstraints::None),
             }))
-        ).fallback(Box::new(PrintFallback("Please use `help` in order to learn which commands are available".red()))))),
+        ).fallback(Box::new(PrintFallback("Please use `help` in order to learn which commands are available".red().to_string()))))),
         sets: {
             let mut map = HashMap::new();
             for set in sets {
@@ -289,13 +289,13 @@ impl FallbackHandler for InputFallback {
         if let Some(learn_instance) = learn_instance.as_mut() {
             if learn_instance.curr_val.matches(input.trim()) {
                 if learn_instance.curr_val.has_multiple_solutions() {
-                    window.println(&format!("\"{}\" is correct, among others {}", input, learn_instance.curr_val).green());
+                    window.println(&format!("\"{}\" is correct, among others {}", input, learn_instance.curr_val).green().to_string());
                 } else {
-                    window.println(&format!("\"{}\" is correct", input).green());
+                    window.println(&format!("\"{}\" is correct", input).green().to_string());
                 }
                 learn_instance.success += 1;
             } else {
-                window.println(&format!("\"{}\" is wrong, correct answers are {}", input, learn_instance.curr_val).red());
+                window.println(&format!("\"{}\" is wrong, correct answers are {}", input, learn_instance.curr_val).red().to_string());
                 learn_instance.failed += 1;
             }
             let word = ctx.sets.get(&learn_instance.set).unwrap().pick_word();
