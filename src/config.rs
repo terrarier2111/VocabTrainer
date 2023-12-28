@@ -3,6 +3,8 @@ use std::fmt::{Debug, Display, Write};
 use rand::Rng;
 use serde_derive::{Deserialize, Serialize};
 
+use crate::utils::count_occourances;
+
 #[derive(Serialize, Deserialize, Clone)]
 pub struct LearnSetConfig {
     pub mode: QuestioningMode,
@@ -95,48 +97,70 @@ pub enum WordValue {
 
 impl WordValue {
 
+    // FIXME: introduce exclusive braces (braces in which only a single subbrace may be present at a time) ´[(te()xt(())eee),(text2)]´
     pub fn matches(&self, raw: &str) -> bool {
-        // FIXME: support multiple braces!
-        fn matches_past_braces(raw: &str, val: &str) -> bool {
-            let val_chars = val.chars();
-            let mut raw_chars = raw.chars();
-            let mut open = 0;
-            let mut last_skipped = false;
-            let mut matches = true;
-            for chr in val_chars {
-                if chr == '(' {
-                    open += 1;
-                    continue;
-                }
-                if chr == ')' && open != 0 {
-                    open -= 1;
-                    continue;
-                }
-                if open != 0 {
-                    last_skipped = true;
-                    continue;
-                }
-                if chr.is_whitespace() && last_skipped {
-                    continue;
-                }
-                last_skipped = false;
-                matches = raw_chars.next().map(|r_chr| chr.eq_ignore_ascii_case(&r_chr)).unwrap_or(false);
-            }
-            matches
-        }
+        // fun fact: this even supports multiple braces
+        fn matches_braces(raw: &str, val: &str) -> bool {
+            const STATE_NOOP: u8 = 0;
+            const STATE_DEL_BRACE: u8 = 1;
+            const STATE_DEL_CONTENT: u8 = 2;
+            const STATE_DEL_FOLLOWING_WHITESPACE: u8 = 3;
 
-        fn matches_in_braces(raw: &str, val: &str) -> bool {
-            let val_chars = val.chars();
-            let mut raw_chars = raw.chars();
-            let mut matches = true;
-            for chr in val_chars {
-                if chr == '(' {
-                    continue;
+            let braces = count_occourances(val, '(');
+            let mut state_vec = vec![0_u8; braces];
+            let mut matches = false;
+            for cnt in 0..braces {
+                let val_chars = val.chars();
+                let mut raw_chars = raw.chars();
+                let mut open = vec![];
+                let mut last_skipped = false;
+                let mut brace_idx = 0;
+                let mut open_cnt = 0;
+                let mut skip_content = 0;
+
+                // simulate an increment over the (bit)state vector
+                for b in 0..state_vec.len() {
+                    if state_vec[b] == STATE_DEL_FOLLOWING_WHITESPACE {
+                        state_vec[b] = STATE_NOOP;
+                        continue;
+                    }
+                    state_vec[b] += 1;
+                    break;
                 }
-                if chr == ')' {
-                    continue;
+                for chr in val_chars {
+                    if chr == '(' {
+                        let state = state_vec[brace_idx];
+                        open.push(state);
+                        if state == STATE_DEL_CONTENT {
+                            skip_content += 1;
+                        }
+                        brace_idx += 1;
+                        if state == STATE_DEL_BRACE || state == STATE_DEL_CONTENT {
+                            continue;
+                        }
+                    }
+                    if chr == ')' {
+                        let state = open.pop().unwrap();
+                        if state == STATE_DEL_CONTENT {
+                            skip_content -= 1;
+                        }
+                        if state == STATE_DEL_FOLLOWING_WHITESPACE {
+                            last_skipped = true;
+                        }
+                        if state == STATE_DEL_BRACE || state == STATE_DEL_CONTENT {
+                            continue;
+                        }
+                    }
+                    if skip_content != 0 {
+                        last_skipped = true;
+                        continue;
+                    }
+                    if chr.is_whitespace() && last_skipped {
+                        continue;
+                    }
+                    last_skipped = false;
+                    matches |= raw_chars.next().map(|r_chr| chr.eq_ignore_ascii_case(&r_chr)).unwrap_or(false);
                 }
-                matches = raw_chars.next().map(|r_chr| chr.eq_ignore_ascii_case(&r_chr)).unwrap_or(false);
             }
             matches
         }
@@ -149,7 +173,7 @@ impl WordValue {
                     Amount::Any => val.iter().any(|val| val.eq_ignore_ascii_case(raw) || {
                         if val.contains('(') && val.contains(')') {
                             // this matching allows "just in time" or "in time" for this given value "(just) in time"
-                            matches_past_braces(raw, val) || matches_in_braces(raw, val)
+                            matches_braces(raw, val)
                         } else {
                             false
                         }

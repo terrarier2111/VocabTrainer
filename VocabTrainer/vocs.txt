@@ -446,4 +446,4 @@ resolution = Entschluss, Auflösung, Lösung
 pertinent = relevant, sachbezogen, einschlägig, sachdienlich
 precipice = Abgrund, Klippe, Steilhang
 piety = Frömmlichkeit, Pietät, Religiosität
-agony = Agonie, (Todes)Qual(en), Schmerz(en), 
+agony = Agonie, (Höllen)(Todes)Qual(en), Schmerz(en), Tortur, Leid(en)

@@ -47,6 +47,31 @@ fn main() -> anyhow::Result<()> {
                 let mut content = fs::read_to_string(dir.join(format!("{}.txt", &file_name)))?;
                 content.remove_matches('\r');
                 let entries = content.split('\n').collect::<Vec<&str>>();
+                // ensure all braces are correct
+                if entries.iter().enumerate().any(|(i, s)| {
+                    let err = {
+                        let mut err = false;
+                        let mut open = 0;
+                        for c in s.chars() {
+                            if c == '(' {
+                                open += 1;
+                            } else if c == ')' {
+                                if open == 0 {
+                                    err = true;
+                                    break;
+                                }
+                                open -= 1;
+                            }
+                        }
+                        err || open != 0
+                    };
+                    if err {
+                        println!("Set {file_name}: erronous braces in line {i}");
+                    }
+                    err
+                }) {
+                    continue;
+                }
                 match cfg.mode {
                     config::QuestioningMode::Order => {
                         if count_occourances(&content, cfg.kv_seperator) == entries.len() {
