@@ -72,10 +72,10 @@ impl Set {
                     let success_rate = (entry.successes as f64 / (entry.tries as f64).max(1.0));
                     let avg_success_rate = (meta.successes as f64 / meta.tries as f64);
                     let normalized_rate = if success_rate > avg_success_rate {
-                        1.0
+                        success_rate.sqrt()
                     } else {
-                        success_rate
-                    }.powi(2);
+                        success_rate.powi(2)
+                    };
                     let success_range = normalized_rate * Self::METRIC_ACCURACY_MAX;
                     let recency_range = Self::METRIC_MOST_RECENT_MAX / (meta.tries as f64 - entry.last_presented as f64).max(1.0).powi(2);
                     let skip_range = (success_range + recency_range).min(Self::METRIC_OVERALL_MAX);
