@@ -1,14 +1,13 @@
-use std::fmt::{Debug, Display, Write};
+use std::{fmt::{Debug, Display, Write}, collections::HashMap, sync::Mutex, io::Write as IOWrite, ops::Deref};
 
 use rand::Rng;
 use serde_derive::{Deserialize, Serialize};
 
-use crate::utils::count_occourances;
+use crate::{utils::count_occourances, dir};
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct LearnSetConfig {
     pub mode: QuestioningMode,
-    pub meta: LearnSetMeta,
     pub kv_seperator: char,
     pub ignore_errors: bool,
 }
@@ -46,46 +45,80 @@ pub enum Direction {
     Bi,
 }
 
-#[derive(Clone)]
 pub struct Set {
     pub name: String,
     pub kind: SetKind,
     pub config: Option<LearnSetConfig>,
+    pub meta: Mutex<LearnSetMeta>,
 }
 
 impl Set {
 
-    pub fn pick_word(&self) -> (Vec<String>, WordValue) {
+    const METRIC_ACCURACY_MAX: f64 = 0.950;
+    const METRIC_MOST_RECENT_MAX: f64 = 0.500;
+    const METRIC_OVERALL_MAX: f64 = 0.975; // TODO: make these values depend on the size of the set!
+
+    pub fn pick_word(&self) -> ((String, Vec<String>), WordValue) {
         match &self.kind {
             SetKind::Order(orders) => {
                 let val = orders.get(rand::thread_rng().gen_range(0..(orders.len()))).unwrap();
-                (vec![val.1.clone()], WordValue::Order(val.0))
+                ((val.0.to_string(), vec![val.1.clone()]), WordValue::Order(val.0))
             }
             SetKind::KV(pairs) => {
-                let val = pairs.get(rand::thread_rng().gen_range(0..(pairs.len()))).unwrap();
-                match self.config.as_ref().unwrap().mode.clone() {
-                    QuestioningMode::KV(questioning) => {
-                        let left_given = questioning.given_direction == Direction::Left || (questioning.given_direction == Direction::Bi && rand::thread_rng().gen_range(0..=1) == 0);
-                        let (key, val) = if left_given {
-                            (val.0.clone(), val.1.clone())
-                        } else {
-                            (val.1.clone(), val.0.clone())
-                        };
-                        let key = {
-                            if questioning.given_amount == Amount::All {
-                                key
+                loop {
+                    let val = pairs.get(rand::thread_rng().gen_range(0..(pairs.len()))).unwrap();
+                    let meta = self.meta.lock().unwrap();
+                    let entry = meta.entries.get(&val.0.0).unwrap();
+                    let success_rate = (entry.successes as f64 / (entry.tries as f64).max(1.0));
+                    let avg_success_rate = (meta.successes as f64 / meta.tries as f64);
+                    let normalized_rate = if success_rate > avg_success_rate {
+                        1.0
+                    } else {
+                        success_rate
+                    }.powi(2);
+                    let success_range = normalized_rate * Self::METRIC_ACCURACY_MAX;
+                    let recency_range = Self::METRIC_MOST_RECENT_MAX / (meta.tries as f64 - entry.last_presented as f64).max(1.0).powi(2);
+                    let skip_range = (success_range + recency_range).min(Self::METRIC_OVERALL_MAX);
+                    println!("skip rng: {} success: {} recency: {}", skip_range, success_range, recency_range);
+                    if rand::thread_rng().gen::<f64>() <= skip_range {
+                        continue;
+                    }
+                    break match self.config.as_ref().unwrap().mode.clone() {
+                        QuestioningMode::KV(questioning) => {
+                            let left_given = questioning.given_direction == Direction::Left || (questioning.given_direction == Direction::Bi && rand::thread_rng().gen_range(0..=1) == 0);
+                            let (key, val) = if left_given {
+                                (val.0.clone(), val.1.clone())
                             } else {
-                                vec![key[rand::thread_rng().gen_range(0..(key.len()))].clone()]
-                            }
-                        };
-                        (key, WordValue::Value(val, questioning.expected_amount))
-                    },
-                    QuestioningMode::Unconfigured => unreachable!(),
-                    QuestioningMode::Order => unreachable!(),
+                                ((val.0.0.clone(), val.1.clone()), val.0.1.clone())
+                            };
+                            let key = {
+                                if questioning.given_amount == Amount::All {
+                                    key
+                                } else {
+                                    (key.0, vec![key.1[rand::thread_rng().gen_range(0..(key.1.len()))].clone()])
+                                }
+                            };
+                            (key, WordValue::Value(val, questioning.expected_amount))
+                        },
+                        QuestioningMode::Unconfigured => unreachable!(),
+                        QuestioningMode::Order => unreachable!(),
+                    };
                 }
             },
             SetKind::Unconfigured => unreachable!(),
         }
+    }
+
+    /// safe the config on disk
+    pub fn save_cfg(&self) {
+        let cfg = dir().join(&format!("{}.json", self.name));
+        std::fs::File::create(cfg).unwrap().write_all(serde_json::to_string(self.config.as_ref().unwrap()).unwrap().as_bytes());
+    }
+
+    /// safe the meta data on disk
+    pub fn save_meta(&self) {
+        let meta = dir().join("cache").join(&format!("{}.json", self.name));
+        std::fs::File::create(meta).unwrap().write_all(serde_json::to_string(self.meta.lock().unwrap().deref()).unwrap().as_bytes());
     }
 
 }
@@ -219,7 +252,7 @@ impl Display for WordValue {
 #[derive(Clone)]
 pub enum SetKind {
     Order(Vec<(usize, String)>),
-    KV(Vec<(Vec<String>, Vec<String>)>),
+    KV(Vec<((String, Vec<String>), Vec<String>)>),
     Unconfigured,
 }
 
@@ -233,7 +266,17 @@ impl Debug for SetKind {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize)]
 pub struct LearnSetMeta {
+    pub successes: usize,
+    pub tries: usize,
+    // the keys are whitespace and lowercase insensitive
+    pub entries: HashMap<String, MetaEntry>,
+}
 
+#[derive(Serialize, Deserialize)]
+pub struct MetaEntry {
+    pub successes: usize,
+    pub tries: usize,
+    pub last_presented: usize,
 }
