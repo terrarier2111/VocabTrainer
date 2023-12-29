@@ -139,10 +139,13 @@ impl WordValue {
             const STATE_DEL_CONTENT: u8 = 2;
             const STATE_DEL_FOLLOWING_WHITESPACE: u8 = 3;
 
+            const STATE_CNT: usize = 4;
+
             let braces = count_occourances(val, '(');
             let mut state_vec = vec![0_u8; braces];
             let mut matches = false;
-            for cnt in 0..braces {
+            for cnt in 0..(braces * STATE_CNT) {
+                let cnt = cnt / STATE_CNT;
                 let val_chars = val.chars();
                 let mut raw_chars = raw.chars();
                 let mut open = vec![];
