@@ -59,7 +59,7 @@ fn main() -> anyhow::Result<()> {
                 };
                 let mut content = fs::read_to_string(dir.join(format!("{}.txt", &file_name)))?;
                 content.remove_matches('\r');
-                let entries = content.split('\n').collect::<Vec<&str>>();
+                let entries = content.split('\n').filter(|s| !s.starts_with(cfg.comment_identifier)).collect::<Vec<&str>>();
                 // ensure all braces are correct
                 if entries.iter().enumerate().any(|(i, s)| {
                     let err = {
@@ -297,6 +297,7 @@ impl CommandImpl for CmdSetup {
                 expected_amount: Amount::Any,
             }),
             kv_seperator: '=',
+            comment_identifier: '#',
             ignore_errors: false,
         }).unwrap().as_bytes()).unwrap();
         ctx.cmd_line.println("Created default config");

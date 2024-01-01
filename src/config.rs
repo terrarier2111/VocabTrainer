@@ -3,12 +3,13 @@ use std::{fmt::{Debug, Display, Write}, collections::HashMap, sync::Mutex, io::W
 use rand::Rng;
 use serde_derive::{Deserialize, Serialize};
 
-use crate::{utils::count_occourances, dir};
+use crate::{utils::{count_occourances, four_to_pow, largest_pow_of_four}, dir};
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct LearnSetConfig {
     pub mode: QuestioningMode,
     pub kv_seperator: char,
+    pub comment_identifier: char,
     pub ignore_errors: bool,
 }
 
@@ -79,7 +80,6 @@ impl Set {
                     let success_range = normalized_rate * Self::METRIC_ACCURACY_MAX;
                     let recency_range = Self::METRIC_MOST_RECENT_MAX / (meta.tries as f64 - entry.last_presented as f64).max(1.0).powi(2);
                     let skip_range = (success_range + recency_range).min(Self::METRIC_OVERALL_MAX);
-                    println!("skip rng: {} success: {} recency: {}", skip_range, success_range, recency_range);
                     if rand::thread_rng().gen::<f64>() <= skip_range {
                         continue;
                     }
@@ -142,10 +142,18 @@ impl WordValue {
             const STATE_CNT: usize = 4;
 
             let braces = count_occourances(val, '(');
+            // fast path
+            if braces == 0 {
+                return false;
+            }
             let mut state_vec = vec![0_u8; braces];
             let mut matches = false;
-            for cnt in 0..(braces * STATE_CNT) {
-                let cnt = cnt / STATE_CNT;
+
+            // ensure we have exactly 4 states
+            assert_eq!(STATE_CNT, 4);
+
+            for cnt in 0..(four_to_pow(braces)) {
+                let cnt = largest_pow_of_four(cnt);
                 let val_chars = val.chars();
                 let mut raw_chars = raw.chars();
                 let mut open = vec![];

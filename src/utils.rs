@@ -29,3 +29,17 @@ pub fn count_occourances(src: &str, chr: char) -> usize {
     }
     occs
 }
+
+#[inline]
+pub fn four_to_pow(pow: usize) -> usize {
+    if pow >= (usize::BITS as usize / 2) {
+        return 0;
+    }
+    1 << (2 * pow)
+}
+
+#[inline]
+pub fn largest_pow_of_four(val: usize) -> usize {
+    let highest_set_bit = usize::BITS as usize - val.max(1).leading_zeros() as usize;
+    highest_set_bit.div_ceil(2)
+}
