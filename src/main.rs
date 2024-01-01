@@ -1,12 +1,13 @@
 #![feature(string_remove_matches)]
 
-use std::{io::Write, fs, sync::{Arc, Mutex}, collections::HashMap, ops::Deref, error::Error, fmt::Display, path::PathBuf};
+use std::{io::Write, fs, sync::{Arc, Mutex}, collections::{HashMap, HashSet}, ops::Deref, error::Error, fmt::Display, path::PathBuf};
 
 use cli_core::CommandImpl;
 use cmd_line::{Window, CmdLineInterface, FallbackHandler};
 use config::{LearnSetConfig, Set, WordValue, MetaEntry};
 use crossterm::style::Stylize;
 use dashmap::DashMap;
+use rand::Rng;
 use utils::{input, count_occourances};
 
 use crate::{cmd_line::{CLIBuilder, PrintFallback}, config::{LearnSetMeta, Questioning, Amount, Direction}, cli_core::{CommandBuilder, CommandParamTy, CmdParamStrConstraints, UsageBuilder, CommandParam}};
@@ -21,9 +22,14 @@ pub fn dir() -> PathBuf {
     PathBuf::from("./VocabTrainer")
 }
 
+fn cache() -> PathBuf {
+    let dir = dir();
+    dir.join("cache")
+}
+
 fn main() -> anyhow::Result<()> {
     let dir = dir();
-    let cache = dir.join("cache");
+    let cache = cache();
     std::fs::create_dir_all(&cache);
     let mut sets = vec![];
     for set in dir.read_dir().unwrap() {
@@ -240,6 +246,7 @@ struct LearnInstance {
     curr_val: WordValue,
     success: usize,
     failed: usize,
+    subset_mask: Vec<usize>,
 }
 
 struct CmdHelp;
@@ -296,7 +303,7 @@ impl CommandImpl for CmdLearn {
         let set_name = input[0].to_lowercase();
         if let Some(set) = ctx.sets.get(&set_name) {
             if set.config.is_some() {
-                let initial = set.pick_word();
+                let initial = set.pick_word(&vec![]);
                 let prompt = {
                     let mut prompt = String::new();
                     for key in initial.0.1.iter() {
@@ -314,10 +321,23 @@ impl CommandImpl for CmdLearn {
                     curr_val: initial.1,
                     success: 0,
                     failed: 0,
+                    subset_mask: vec![],
                 });
                 ctx.cmd_line.push_screen(Window::new(CLIBuilder::new().command(
                     CommandBuilder::new("$end", CmdLearnEnd)
-                ).fallback(Box::new(InputFallback)).prompt(prompt)));
+                ).command(CommandBuilder::new("$subset", CmdSubset).params(UsageBuilder::new().required(CommandParam {
+                    name: "size".to_string(),
+                    ty: CommandParamTy::Int(cli_core::CmdParamNumConstraints::None),
+                }))).fallback(Box::new(InputFallback)).prompt(prompt).on_close(Box::new(|ctx| {
+                    let mut instance = ctx.learn_instance.lock().unwrap();
+                    let mut instance = instance.as_mut().unwrap();
+                    instance.subset_mask.clear();
+                    if instance.success == 0 || instance.failed == 0 {
+                        ctx.cmd_line.println(&format!("You learned {}/{} vocabs successfully", instance.success, instance.success + instance.failed));
+                    } else {
+                        ctx.cmd_line.println(&format!("You learned {}/{} vocabs successfully ({:.2}%)", instance.success, instance.success + instance.failed, 100.0 * (instance.success as f64 / (instance.success as f64 + instance.failed as f64))));
+                    }
+                }))));
                 return Ok(());
             }
         }
@@ -331,13 +351,64 @@ impl CommandImpl for CmdLearnEnd {
     type CTX = Arc<TrainingCtx>;
 
     fn execute(&self, ctx: &Arc<TrainingCtx>, _input: &[&str]) -> anyhow::Result<()> {
-        ctx.cmd_line.pop_screen();
-        let instance = ctx.learn_instance.lock().unwrap();
-        let stats = instance.as_ref().unwrap();
-        ctx.cmd_line.println(&format!("You learned {}/{} vocabs successfully ({:.2}%)", stats.success, stats.success + stats.failed, (stats.success as f64 / (stats.success as f64 + stats.failed as f64))));
+        ctx.cmd_line.pop_screen(&ctx);
         Ok(())
     }
 }
+
+struct CmdSubset;
+
+impl CommandImpl for CmdSubset {
+    type CTX = Arc<TrainingCtx>;
+
+    fn execute(&self, ctx: &Self::CTX, input: &[&str]) -> anyhow::Result<()> {
+        let mut learn_instance = ctx.learn_instance.lock().unwrap();
+        if let Some(learn_instance) = learn_instance.as_mut() {
+            let set_size = ctx.sets.get(&learn_instance.set).unwrap().size();
+            let num = input[0].parse::<usize>().unwrap();
+            if num >= set_size {
+                return Err(anyhow::Error::from(SetLimitError {
+                    set: learn_instance.set.clone(),
+                    set_size,
+                    provided_size: num,
+                }));
+            }
+            learn_instance.subset_mask = {
+                let mut subset = vec![];
+                let mut remaining = num;
+                while remaining != 0 {
+                    let gen = rand::thread_rng().gen_range(0..set_size);
+                    if !subset.contains(&gen) {
+                        subset.push(gen);
+                        remaining -= 1;
+                    }
+                }
+                subset
+            };
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug)]
+struct SetLimitError {
+    set: String,
+    set_size: usize,
+    provided_size: usize,
+}
+
+impl Display for SetLimitError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("there is no subset for the set ")?;
+        f.write_str(&self.set)?;
+        f.write_str(" of size ")?;
+        f.write_str(self.provided_size.to_string().as_str())?;
+        f.write_str(" as the set itself only has a size of ")?;
+        f.write_str(self.set_size.to_string().as_str())
+    }
+}
+
+impl Error for SetLimitError {}
 
 struct InputFallback;
 
@@ -370,7 +441,7 @@ impl FallbackHandler for InputFallback {
                 }
             }
             set.save_meta();
-            let word = set.pick_word();
+            let word = set.pick_word(&learn_instance.subset_mask);
             let prompt = {
                 let mut prompt = String::new();
                 for key in word.0.1.iter() {

@@ -40,13 +40,16 @@ impl CmdLineInterface {
         self.windows.read().unwrap().last().unwrap().reapply_prompt();
     }
 
-    pub fn pop_screen(&self) -> Option<Arc<Window>> {
+    pub fn pop_screen(&self, ctx: &Arc<TrainingCtx>) -> Option<Arc<Window>> {
         let mut windows = self.windows.write().unwrap();
         if windows.len() > 1 {
             let mut lock = std::io::stdout().lock();
             lock.queue(terminal::LeaveAlternateScreen);
             lock.flush();
-            return windows.pop();
+            let mut ret = windows.pop().unwrap();
+            drop(windows);
+            ret.handle_close(ctx);
+            return Some(ret);
         }
         None
     }
@@ -80,8 +83,10 @@ impl CmdLineInterface {
                     // FIXME: there is a race possible in here, fix this!
                     let mut windows = self.windows.write().unwrap();
                     if windows.len() > 1 {
-                        windows.pop();
+                        let popped = windows.pop().unwrap();
                         windows.last().unwrap().reapply_prompt();
+                        drop(windows);
+                        popped.handle_close(ctx);
                     }
                 },
             }
@@ -105,6 +110,7 @@ pub struct Window {
     core: CLICore<Arc<TrainingCtx>>,
     fallback: Box<dyn FallbackHandler>,
     term: StdioTerm,
+    on_close: Box<dyn Fn(&Arc<TrainingCtx>)>,
 }
 
 impl Window {
@@ -156,6 +162,10 @@ impl Window {
         Ok(())
     }
 
+    pub fn handle_close(&self, ctx: &Arc<TrainingCtx>) {
+        (&self.on_close)(ctx);
+    }
+
 }
 
 pub trait FallbackHandler {
@@ -175,6 +185,7 @@ pub struct CLIBuilder {
     cmds: Vec<CommandBuilder<Arc<TrainingCtx>>>,
     prompt: Option<String>,
     fallback: Option<Box<dyn FallbackHandler>>,
+    on_close: Option<Box<dyn Fn(&Arc<TrainingCtx>)>>,
 }
 
 impl CLIBuilder {
@@ -183,6 +194,7 @@ impl CLIBuilder {
             cmds: vec![],
             prompt: None,
             fallback: None,
+            on_close: None,
         }
     }
 
@@ -201,12 +213,18 @@ impl CLIBuilder {
         self
     }
 
+    pub fn on_close(mut self, on_close: Box<dyn Fn(&Arc<TrainingCtx>)>) -> Self {
+        self.on_close = Some(on_close);
+        self
+    }
+
     pub fn build(self) -> Window {
         let prompt = self.prompt.as_ref().map_or(String::new(), |prompt| format!("{}", prompt));
         Window {
             fallback: self.fallback.expect("a fallback has to be specified before a CLI can be built"),
             term: StdioTerm::new(prompt, None, 10),
             core: CLICore::new(self.cmds),
+            on_close: self.on_close.unwrap_or_else(|| Box::new(|_| {})),
         }
     }
 }
@@ -328,6 +346,7 @@ mod term {
                                         crossterm::event::KeyCode::Enter => {
                                             let mut lock = std::io::stdout().lock();
                                             lock.queue(terminal::ScrollUp(1));
+                                            lock.queue(cursor::MoveToColumn(0));
                                             lock.queue(style::Print(&print_ctx.prompt));
                                             lock.flush();
                                             print_ctx.cursor_idx = 0;

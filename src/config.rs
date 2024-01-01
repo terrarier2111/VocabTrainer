@@ -1,4 +1,4 @@
-use std::{fmt::{Debug, Display, Write}, collections::HashMap, sync::Mutex, io::Write as IOWrite, ops::Deref};
+use std::{fmt::{Debug, Display, Write}, collections::{HashMap, HashSet}, sync::Mutex, io::Write as IOWrite, ops::Deref};
 
 use rand::Rng;
 use serde_derive::{Deserialize, Serialize};
@@ -22,8 +22,6 @@ pub struct Questioning {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum QuestioningMode {
-    // this is special because it means that the learn set is disabled
-    Unconfigured,
     // possible formats for sets:
     // ID: VAL -> explicit id
     // VAL     -> implicit id
@@ -59,15 +57,33 @@ impl Set {
     const METRIC_MOST_RECENT_MAX: f64 = 0.500;
     const METRIC_OVERALL_MAX: f64 = 0.975; // TODO: make these values depend on the size of the set!
 
-    pub fn pick_word(&self) -> ((String, Vec<String>), WordValue) {
+    #[inline]
+    pub fn size(&self) -> usize {
+        match &self.kind {
+            SetKind::Order(entries) => entries.len(),
+            SetKind::KV(entries) => entries.len(),
+        }
+    }
+
+    pub fn pick_word(&self, subset: &Vec<usize>) -> ((String, Vec<String>), WordValue) {
         match &self.kind {
             SetKind::Order(orders) => {
-                let val = orders.get(rand::thread_rng().gen_range(0..(orders.len()))).unwrap();
+                let idx = if subset.is_empty() {
+                    rand::thread_rng().gen_range(0..(orders.len()))
+                } else {
+                    subset[rand::thread_rng().gen_range(0..(subset.len()))]
+                };
+                let val = orders.get(idx).unwrap();
                 ((val.0.to_string(), vec![val.1.clone()]), WordValue::Order(val.0))
             }
             SetKind::KV(pairs) => {
                 loop {
-                    let val = pairs.get(rand::thread_rng().gen_range(0..(pairs.len()))).unwrap();
+                    let idx = if subset.is_empty() {
+                        rand::thread_rng().gen_range(0..(pairs.len()))
+                    } else {
+                        subset[rand::thread_rng().gen_range(0..(subset.len()))]
+                    };
+                    let val = &pairs[idx];
                     let meta = self.meta.lock().unwrap();
                     let entry = meta.entries.get(&val.0.0).unwrap();
                     let success_rate = (entry.successes as f64 / (entry.tries as f64).max(1.0));
@@ -100,7 +116,6 @@ impl Set {
                             };
                             (key, WordValue::Value(val, questioning.expected_amount))
                         },
-                        QuestioningMode::Unconfigured => unreachable!(),
                         QuestioningMode::Order => unreachable!(),
                     };
                 }
