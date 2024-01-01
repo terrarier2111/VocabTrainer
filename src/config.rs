@@ -105,7 +105,6 @@ impl Set {
                     };
                 }
             },
-            SetKind::Unconfigured => unreachable!(),
         }
     }
 
@@ -264,7 +263,6 @@ impl Display for WordValue {
 pub enum SetKind {
     Order(Vec<(usize, String)>),
     KV(Vec<((String, Vec<String>), Vec<String>)>),
-    Unconfigured,
 }
 
 impl Debug for SetKind {
@@ -272,7 +270,6 @@ impl Debug for SetKind {
         match self {
             Self::Order(_) => f.write_str("Order"),
             Self::KV(_) => f.write_str("KV"),
-            Self::Unconfigured => f.write_str("Unconfigured"),
         }
     }
 }

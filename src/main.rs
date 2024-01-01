@@ -37,15 +37,19 @@ fn main() -> anyhow::Result<()> {
             let config = dir.as_path().join(format!("{}.json", file_name));
             let meta = cache.join(format!("{}.json", file_name));
             if extension.eq_ignore_ascii_case("txt") {
-                // check if there is no cfg for this set
+                // check if there is no cfg for this set and create defaults, if necessary
                 if !config.exists() {
-                    sets.push(Set {
-                        name: file_name.to_string(),
-                        kind: config::SetKind::Unconfigured,
-                        config: None,
-                        meta: Mutex::new(LearnSetMeta { successes: 0, tries: 0, entries: HashMap::new() }),
-                    });
-                    continue;
+                    let mut cfg = fs::File::create(&config).unwrap();
+                    cfg.write_all(serde_json::to_string(&LearnSetConfig {
+                        mode: config::QuestioningMode::KV(Questioning {
+                            given_amount: Amount::All,
+                            given_direction: Direction::Left,
+                            expected_amount: Amount::Any,
+                        }),
+                        kv_seperator: '=',
+                        comment_identifier: '#',
+                        ignore_errors: false,
+                    }).unwrap().as_bytes()).unwrap();
                 }
                 let mut cfg: LearnSetConfig = serde_json::from_slice(&fs::read(config)?)?;
                 let mut meta: LearnSetMeta = if meta.exists() {
@@ -196,11 +200,6 @@ fn main() -> anyhow::Result<()> {
                 name: "set".to_string(),
                 ty: CommandParamTy::String(CmdParamStrConstraints::None),
             }))
-        ).command(
-            CommandBuilder::new("setup", CmdSetup).params(UsageBuilder::new().required(CommandParam {
-                name: "set".to_string(),
-                ty: CommandParamTy::String(CmdParamStrConstraints::None),
-            }))
         ).fallback(Box::new(PrintFallback("Please use `help` in order to learn which commands are available".red().to_string()))))),
         sets: {
             let mut map = DashMap::new();
@@ -271,36 +270,6 @@ impl CommandImpl for CmdSets {
         for set in ctx.sets.iter() {
             ctx.cmd_line.println(&format!("Found {}: {:?}", set.value().name, set.value().kind)).unwrap();
         }
-        Ok(())
-    }
-}
-
-struct CmdSetup;
-
-impl CommandImpl for CmdSetup {
-    type CTX = Arc<TrainingCtx>;
-
-    fn execute(&self, ctx: &Arc<TrainingCtx>, input: &[&str]) -> anyhow::Result<()> {
-        let set_name = input[0].to_lowercase();
-        let dir = dir();
-        let file_path = dir.join(format!("{}.txt", &set_name));
-        if !file_path.exists() {
-            println!("file {:?}", dir.join(format!("{}.txt", &set_name)));
-            return Err(anyhow::Error::from(SetDoesNotExistsError(set_name)));
-        }
-        let cfg = dir.join(format!("{}.json", &set_name));
-        let mut cfg = fs::File::create(cfg).unwrap();
-        cfg.write_all(serde_json::to_string(&LearnSetConfig {
-            mode: config::QuestioningMode::KV(Questioning {
-                given_amount: Amount::All,
-                given_direction: Direction::Left,
-                expected_amount: Amount::Any,
-            }),
-            kv_seperator: '=',
-            comment_identifier: '#',
-            ignore_errors: false,
-        }).unwrap().as_bytes()).unwrap();
-        ctx.cmd_line.println("Created default config");
         Ok(())
     }
 }
