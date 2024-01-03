@@ -4,11 +4,11 @@ use std::{io::Write, fs, sync::{Arc, Mutex}, collections::{HashMap, HashSet}, op
 
 use cli_core::CommandImpl;
 use cmd_line::{Window, CmdLineInterface, FallbackHandler};
-use config::{LearnSetConfig, Set, WordValue, MetaEntry};
+use config::{LearnSetConfig, Set, MetaEntry, QuestioningMode, Word};
 use crossterm::style::Stylize;
 use dashmap::DashMap;
 use rand::Rng;
-use utils::{input, count_occourances};
+use utils::{input, count_occourances, calculate_hash};
 
 use crate::{cmd_line::{CLIBuilder, PrintFallback}, config::{LearnSetMeta, Questioning, Amount, Direction}, cli_core::{CommandBuilder, CommandParamTy, CmdParamStrConstraints, UsageBuilder, CommandParam}};
 
@@ -47,11 +47,12 @@ fn main() -> anyhow::Result<()> {
                 if !config.exists() {
                     let mut cfg = fs::File::create(&config).unwrap();
                     cfg.write_all(serde_json::to_string(&LearnSetConfig {
-                        mode: config::QuestioningMode::KV(Questioning {
+                        questioning: Questioning {
                             given_amount: Amount::All,
                             given_direction: Direction::Left,
                             expected_amount: Amount::Any,
-                        }),
+                            mode: QuestioningMode::KV,
+                        },
                         kv_seperator: '=',
                         comment_identifier: '#',
                         ignore_errors: false,
@@ -64,7 +65,10 @@ fn main() -> anyhow::Result<()> {
                     LearnSetMeta {
                         successes: 0,
                         tries: 0,
-                        entries: HashMap::new(),
+                        entries: match cfg.questioning.mode {
+                            config::QuestioningMode::Order => config::LearnSetMetaEntries::Order(HashMap::new()),
+                            config::QuestioningMode::KV => config::LearnSetMetaEntries::KV(HashMap::new()),
+                        },
                     }
                 };
                 let mut content = fs::read_to_string(dir.join(format!("{}.txt", &file_name)))?;
@@ -96,7 +100,7 @@ fn main() -> anyhow::Result<()> {
                     continue;
                 }
 
-                match cfg.mode {
+                match cfg.questioning.mode {
                     config::QuestioningMode::Order => {
                         if count_occourances(&content, cfg.kv_seperator) == entries.len() {
                             let mut err = false;
@@ -115,25 +119,43 @@ fn main() -> anyhow::Result<()> {
                                 }
                             }).collect::<Vec<_>>();
                             if !err {
+                                let mut entry_set = HashSet::with_capacity(entries.len());
                                 let mut outdated = false;
+                                let mut meta = {
+                                    for entry in entries.iter() {
+                                        entry_set.insert(entry.0);
+                                        let mut entries = meta.entries.order_mut().unwrap();
+                                        // ensure metadata is up-to-date
+                                        let mut entry_ref = entries.entry(entry.0);
+                                        let hash = calculate_hash(&entry.1) as usize;
+                                        let mut val = entry_ref.or_insert_with(|| {
+                                            outdated = true;
+                                            (hash, MetaEntry {
+                                                successes: 0,
+                                                tries: 0,
+                                                last_presented: 0,
+                                            })
+                                        });
+                                        if val.0 != hash {
+                                            val.0 = hash;
+                                            outdated = true;
+                                        }
+                                    }
+                                    meta
+                                };
+                                let mut meta_entries = meta.entries.order_mut().unwrap();
+                                if meta_entries.len() != entries.len() {                
+                                    // cleanup vacant entries            
+                                    meta_entries.retain(|key, _| {
+                                        let retain = entry_set.contains(key);
+                                        outdated |= !retain;
+                                        retain
+                                    });
+                                }
                                 let set = Set {
                                     name: file_name.to_string(),
-                                    config: Some(cfg.clone()),
-                                    meta: {
-                                        for entry in entries.iter() {
-                                            let key = entry.0.to_string();
-                                            // ensure metadata is up-to-date
-                                            if !meta.entries.contains_key(&key) {
-                                                outdated = true;
-                                                meta.entries.insert(key, MetaEntry {
-                                                    successes: 0,
-                                                    tries: 0,
-                                                    last_presented: 0,
-                                                });
-                                            }
-                                        }
-                                        Mutex::new(meta)
-                                    },
+                                    config: cfg.clone(),
+                                    meta: Mutex::new(meta),
                                     kind: config::SetKind::Order(entries),
                                 };
                                 if outdated {
@@ -146,28 +168,31 @@ fn main() -> anyhow::Result<()> {
                         sets.push(Set {
                             name: file_name.to_string(),
                             kind: config::SetKind::Order(entries.iter().enumerate().map(|(i, s)| (i, s.trim().to_string())).collect::<Vec<_>>()),
-                            config: Some(cfg),
-                            meta: todo!(),
+                            config: cfg,
+                            meta: Mutex::new(meta),
                         });
                     },
-                    config::QuestioningMode::KV(ref questioning) => {
+                    config::QuestioningMode::KV => {
                         let mut err = false;
                         let mut outdated = false;
+                        let mut entry_set = HashSet::with_capacity(entries.len());
                         let pairs = entries.iter().enumerate().map(|(i, s)| {
                             if let Some((left, right)) = s.split_once(cfg.kv_seperator) {
                                 let left = left.trim();
                                 let right = right.trim();
                                 let left_parts = left.split(',').map(|s| s.trim().to_owned()).collect::<Vec<_>>();
                                 let mut key = trim_whitespaces(&s.to_lowercase());
+                                let mut entries = meta.entries.kv_mut().unwrap();
                                 // ensure metadata is up-to-date
-                                if !meta.entries.contains_key(&key) {
-                                    meta.entries.insert(key.clone(), MetaEntry {
+                                if !entries.contains_key(&key) {
+                                    entries.insert(key.clone(), MetaEntry {
                                         successes: 0,
                                         tries: 0,
                                         last_presented: 0,
                                     });
                                     outdated = true;
                                 }
+                                entry_set.insert(key.clone());
                                 ((key, left_parts), right.split(',').map(|s| s.trim().to_owned()).collect::<Vec<_>>())
                             } else {
                                 if !cfg.ignore_errors {
@@ -178,10 +203,18 @@ fn main() -> anyhow::Result<()> {
                             }
                         }).filter(|e| !e.0.1.is_empty() && !e.1.is_empty()).collect::<Vec<_>>();
                         if !err {
+                            let mut meta_entries = meta.entries.kv_mut().unwrap();
+                            if meta_entries.len() != entries.len() {                            
+                                meta_entries.retain(|key, _| {
+                                    let retain = entry_set.contains(key);
+                                    outdated |= !retain;
+                                    retain
+                                });
+                            }
                             let set = Set {
                                 name: file_name.to_string(),
                                 kind: config::SetKind::KV(pairs),
-                                config: Some(cfg),
+                                config: cfg,
                                 meta: Mutex::new(meta),
                             };
                             if outdated {
@@ -217,7 +250,6 @@ fn main() -> anyhow::Result<()> {
         learn_instance: Mutex::new(None),
     });
     ctx.cmd_line.println(&format!("Found {} sets", set_cnt)).unwrap();
-    // FIXME: add exit command!
     loop {
         ctx.cmd_line.await_input(&ctx);
     }
@@ -242,8 +274,7 @@ pub struct TrainingCtx {
 
 struct LearnInstance {
     set: String,
-    curr_word: (String, Vec<String>),
-    curr_val: WordValue,
+    curr_word: Word,
     success: usize,
     failed: usize,
     subset_mask: Vec<usize>,
@@ -302,23 +333,11 @@ impl CommandImpl for CmdLearn {
     fn execute(&self, ctx: &Arc<TrainingCtx>, input: &[&str]) -> anyhow::Result<()> {
         let set_name = input[0].to_lowercase();
         if let Some(set) = ctx.sets.get(&set_name) {
-            if set.config.is_some() {
-                let initial = set.pick_word(&vec![]);
-                let prompt = {
-                    let mut prompt = String::new();
-                    for key in initial.0.1.iter() {
-                        prompt.push_str(key);
-                        prompt.push_str(", ");
-                    }
-                    prompt.pop();
-                    prompt.pop();
-                    prompt.push_str(": ");
-                    prompt
-                };
+            let initial = set.pick_word(&vec![]);
+                let prompt = format!("{}: ", initial.key());
                 *ctx.learn_instance.lock().unwrap() = Some(LearnInstance {
                     set: set_name,
-                    curr_word: initial.0,
-                    curr_val: initial.1,
+                    curr_word: initial,
                     success: 0,
                     failed: 0,
                     subset_mask: vec![],
@@ -339,7 +358,6 @@ impl CommandImpl for CmdLearn {
                     }
                 }))));
                 return Ok(());
-            }
         }
         return Err(anyhow::Error::from(SetDoesNotExistsError(set_name)));
     }
@@ -418,16 +436,16 @@ impl FallbackHandler for InputFallback {
         if let Some(learn_instance) = learn_instance.as_mut() {
             let mut set = ctx.sets.get_mut(&learn_instance.set).unwrap();
             {
-                let mut config = set.config.as_mut().unwrap();
+                let mut config = &mut set.config;
                 let mut meta = set.meta.lock().unwrap();
                 meta.tries += 1;
                 let tries = meta.tries;
-                let mut entry = meta.entries.get_mut(&learn_instance.curr_word.0).unwrap();
+                let mut entry = meta.entries.get_entry_mut(&learn_instance.curr_word).unwrap();
                 entry.tries += 1;
                 entry.last_presented = tries;
-                if learn_instance.curr_val.matches(input.trim()) {
-                    if learn_instance.curr_val.has_multiple_solutions() {
-                        window.println(&format!("\"{}\" is correct, among others {}", input, learn_instance.curr_val).green().to_string());
+                if learn_instance.curr_word.matches(input.trim()) {
+                    if learn_instance.curr_word.has_multiple_solutions() {
+                        window.println(&format!("\"{}\" is correct, among others {}", input, learn_instance.curr_word.value()).green().to_string());
                     } else {
                         window.println(&format!("\"{}\" is correct", input).green().to_string());
                     }
@@ -436,26 +454,15 @@ impl FallbackHandler for InputFallback {
                     drop(entry);
                     meta.successes += 1;
                 } else {
-                    window.println(&format!("\"{}\" is wrong, correct answers are {}", input, learn_instance.curr_val).red().to_string());
+                    window.println(&format!("\"{}\" is wrong, correct answers are {}", input, learn_instance.curr_word.value()).red().to_string());
                     learn_instance.failed += 1;
                 }
             }
             set.save_meta();
             let word = set.pick_word(&learn_instance.subset_mask);
-            let prompt = {
-                let mut prompt = String::new();
-                for key in word.0.1.iter() {
-                    prompt.push_str(key);
-                    prompt.push_str(", ");
-                }
-                prompt.pop();
-                prompt.pop();
-                prompt.push_str(": ");
-                prompt
-            };
+            let prompt = format!("{}: ", word.key());
             window.set_prompt(prompt);
-            learn_instance.curr_word = word.0;
-            learn_instance.curr_val = word.1;
+            learn_instance.curr_word = word;
         }
         Ok(true)
     }

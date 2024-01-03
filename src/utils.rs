@@ -1,4 +1,4 @@
-use std::{io::{Error, ErrorKind, Write}, fmt::Display};
+use std::{io::{Error, ErrorKind, Write}, fmt::Display, hash::{DefaultHasher, Hasher}};
 
 
 pub fn input<F: Display>(text: F) -> anyhow::Result<String> {
@@ -42,4 +42,11 @@ pub fn four_to_pow(pow: usize) -> usize {
 pub fn largest_pow_of_four(val: usize) -> usize {
     let highest_set_bit = usize::BITS as usize - val.max(1).leading_zeros() as usize;
     highest_set_bit.div_ceil(2)
+}
+
+#[inline]
+pub fn calculate_hash<T: std::hash::Hash>(t: &T) -> u64 {
+    let mut s = DefaultHasher::new();
+    t.hash(&mut s);
+    s.finish()
 }
