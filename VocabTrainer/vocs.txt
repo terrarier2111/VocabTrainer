@@ -5,9 +5,9 @@ inherent = eigen
 inherently = von Natur aus
 to strive = streben
 to persuade = überzeugen
-marvellous = fabelhaft
+marvellous = fabelhaft, großartig, fantastisch, herrlich, wundervoll, wunderbar
 precious = wertvoll
-extensive = umfangreich
+extensive = umfangreich, weitreichend, ausgiebig
 permissive = freizügig, antiautoritär
 revised = überarbeitet
 faithfulness = Treue
@@ -22,7 +22,7 @@ furthermore = zudem
 to perceive = wahrnehmen
 to denounce smth = etwas anprangern
 to finance yourself = sich finanzieren
-to mitigate = mindern
+to mitigate = (etwas) mindern, (etwas) lindern, (etwas) mildern
 invariant = unveränderlich, unvariabel
 mandatory = verpflichtend
 to dispose = entsorgen
@@ -48,14 +48,14 @@ depravity = Verkommenheit
 testamonie = zeugnis, Aussage
 rather than = lieber als, besser als
 sustainable = nachhaltig
-to conceive = begreifen, in Erwägung ziehen, konzipieren
+to conceive = begreifen, in Erwägung ziehen, konzipieren, vorstellen
 leap = sprung
 hence = daher, deshalb, also
 culmination, peak = höhepunkt
 to dismantle = auseinandernehmen
 synthetic = künstlich
 commerce = Handel
-to adhere to something = an etwas festhalten
+to adhere to something = sich an etwas halten
 to alliviate smth = etwas mindern
 to cease = aufhören
 in spite of smth = trotz etwas
@@ -116,7 +116,7 @@ besides = zusätzlich zu(in addition to), zudem
 stove = Herd
 cease and desist order = Unterlassungsverfügung
 cheek = Wange, Backe
-confiscated = beschlagnahmt
+confiscated = beschlagnahmt, konfisziert
 bra = BH
 hedgehog = Igel
 cleaver = Hackmesser
@@ -141,13 +141,13 @@ vital = (lebens)wichtig, notwendig, unerlässlich
 oh dear = ach je
 anguish = Pein, Qual, Angst
 aspiration = Streben, Ziel, Bestrebung
-tremendously = enorm, massiv
+tremendously = enorm, massiv, außerordentlich, immens
 fallacious = trügerisch
 blatantly = offensichtlich
 downright = regelrecht
 envy = Neid
 inconsistencies = Ungereimtheiten, Unstimmigkeiten, Widersprüche
-burden = Last
+burden = Last, Belastung(en), Bürde
 welfare = Wohlergehen, Wohlfahrt
 suitably = angemessen
 captivated, tied up, spellbound = gefesselt
@@ -191,18 +191,18 @@ felony = Verbrechen
 curable = heilbar
 to unsert = deaktivieren
 expenditure = Aufwand
-to denote = bezeichnen, bedeuten, kennzeichnen
-to shove = schieben, stoßen, schubsen
-to restrain = zurückhalten, unterdrücken, einschränken
+(to )denote = bezeichnen, bedeuten, kennzeichnen
+(to )shove = stopfen, drängen, schieben, stoßen, schubsen
+(to )restrain = zurückhalten, unterdrücken, einschränken
 imminent = (unmittelbar) bevorstehend
-prospect = the possibility or likelihood of some future event occurring <there was no prospect of a reconciliation> = Aussicht
+prospect = Aussicht, Ausblick, Perspektive
 indecisive = unentschlossen
 brevity = Kürze
 juristiction = Zuständigkeit
 recidivism = Rückfälligkeit
 coercive = Zwang, Nötigung
 rearing = Aufzucht
-to commence = beginnen
+to commence = beginnen, anfangen, starten
 to deceive someone = jemanden täuschen
 conscientious = gewissenhaft
 to consult = befragen
@@ -234,14 +234,14 @@ intendance = Absicht
 detention = Nachsitzen
 to devote = hingeben
 to disown = verleugnen
-dissidence = Wiederstand
+dissidence = Wiederstand, Uneinigkeit
 to vindicate = (sich) rechtfertigen
 strenuous = anstrengend
 to object = einwenden, widersprechen, beanstanden, protestieren, (gegen etwas) Einspruch erheben
 estranged = zerstritten, entfremdet
 retribution = Vergeltung
 diligent = fleißig, gewissenhaft, sorgfätig
-to advocate = befürworten
+to advocate((sb)(smth)) = (etwas)(jemanden)(jmnd(.))(etw(.))befürworten, sich für (etwas)(jemand(en)) einsetzen
 to abolish = abschaffen
 steep = steil
 to pave = pflastern
@@ -313,7 +313,7 @@ to resemble smth = etwas gleichen
 solstice = Sonnenwende
 laces = Schnürsenkel
 penitentary = Bußgelder, Büßer
-hideous = abscheulich
+hideous = abscheulich, scheußlich, furchtbar, gräßlich
 bland = geschmacklos, fade
 recreationally = freizeitlich
 engulfment = Verschlingung
@@ -372,7 +372,7 @@ disparate
 blunder
 dissemble
 frenetic = fieberhaft
-cachet = prestige
+cachet = Gütesiegel, prestige
 spurious = inauthentic, fake
 glass of water = glas wasser
 discord = Konflikt, Zwietracht, Diskurs, Missklang, Zwist
@@ -401,17 +401,17 @@ untoward
 veribiage
 replete
 traduce
-diffuse
+(to )diffuse = zerstreuen, vermischen
 engender
 courtesy
 discerning
 desuetude
-enamored
-condone
+enamored = verliebt
+condone = dulden, hinnehmen
 fickle
 concomitant
-cupidity
-conciliatory
+cupidity = Gier, Habgier
+conciliatory = versöhnlich, beschwichtigend
 feisty = lebhaft, angriffslustig, temperamentvoll
 dissipate = zerstreuen, verbreiten, vergeuden
 animus = Feindseligkeit
@@ -451,3 +451,8 @@ humiliation = Demütigung, Erniedrigung
 excruciating = unerträglich, quälend, schmerzhaft, qualvoll, entsetzlich
 epiphany = Offenbarung, Erleuchtung
 to curse = fluchen
+curse = Fluch
+eldritch = unheimlich, schauerlich, gespenstisch, überirdisch
+crest = Wappen, Kamm, Krone, Gipfel, Bergrücken, Kuppe, Scheitel
+formidable = beeindurckend, beachtlich, enorm
+vexed = verärgert, leidig, bekümmert, gereizt
