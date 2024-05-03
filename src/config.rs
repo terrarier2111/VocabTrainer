@@ -1,4 +1,4 @@
-use std::{fmt::{Debug, Display, Write}, collections::{HashMap, HashSet}, sync::Mutex, io::Write as IOWrite, ops::Deref};
+use std::{fmt::{Debug, Display}, collections::HashMap, sync::Mutex, io::Write as IOWrite, ops::Deref};
 
 use rand::Rng;
 use serde_derive::{Deserialize, Serialize};
@@ -91,8 +91,8 @@ impl Set {
                     let val = &pairs[idx];
                     let meta = self.meta.lock().unwrap();
                     let entry = meta.entries.kv().unwrap().get(&val.0.0).unwrap();
-                    let success_rate = (entry.successes as f64 / (entry.tries as f64).max(1.0));
-                    let avg_success_rate = (meta.successes as f64 / meta.tries as f64);
+                    let success_rate = entry.successes as f64 / (entry.tries as f64).max(1.0);
+                    let avg_success_rate = meta.successes as f64 / (meta.tries as f64).max(1.0);
                     let normalized_rate = if success_rate > avg_success_rate {
                         success_rate.sqrt()
                     } else {
@@ -132,13 +132,13 @@ impl Set {
     /// safe the config on disk
     pub fn save_cfg(&self) {
         let cfg = dir().join(&format!("{}.json", self.name));
-        std::fs::File::create(cfg).unwrap().write_all(serde_json::to_string(&self.config).unwrap().as_bytes());
+        std::fs::File::create(cfg).unwrap().write_all(serde_json::to_string(&self.config).unwrap().as_bytes()).unwrap();
     }
 
     /// safe the meta data on disk
     pub fn save_meta(&self) {
         let meta = dir().join("cache").join(&format!("{}.json", self.name));
-        std::fs::File::create(meta).unwrap().write_all(serde_json::to_string(self.meta.lock().unwrap().deref()).unwrap().as_bytes());
+        std::fs::File::create(meta).unwrap().write_all(serde_json::to_string(self.meta.lock().unwrap().deref()).unwrap().as_bytes()).unwrap();
     }
 
 }

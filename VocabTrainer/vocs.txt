@@ -238,7 +238,7 @@ dissidence = Wiederstand
 to vindicate = (sich) rechtfertigen
 strenuous = anstrengend
 to object = einwenden, widersprechen, beanstanden, protestieren, (gegen etwas) Einspruch erheben
-estranged = zerstritten
+estranged = zerstritten, entfremdet
 retribution = Vergeltung
 diligent = fleißig, gewissenhaft, sorgfätig
 to advocate = befürworten
@@ -279,7 +279,7 @@ very rich = wealthy
 very clean = spotless
 very happy = jubilant
 very (dry)/thristy -> parched
-mutually = gegenseitig/beidseitig
+mutually = gegenseitig, beidseitig
 defecate = Stuhlgang
 hospitality = Gastfreundschaft
 ingenious = genial
@@ -322,18 +322,18 @@ superfluous = überflüssig
 self-effacing = selbstironisch
 soreness = Schmerz
 sore = weh
-exude = verströmen
+exude = verströmen, ausstrahlen
 pesky = ärgerlich, lästig, nervig
 calamity = Unglück
 delinquent = Übeltäter
 impetuous = impulsiv, ungestüm
 impecunious = poor
-refrain
-abstain
-accolade
-scorn
-commiserate
-conjecture
+refrain = unterlassen
+abstain = Enthaltung, (sich )enthalten
+accolade = Auszeichnung, Anerkennung, Lob, Ehrung
+scorn = Verachtung, verachten, verschmähen
+commiserate = bemitleiden, bedauern
+conjecture = Vermutung, Mutmaßung
 blend
 gauche
 rattled
@@ -370,7 +370,6 @@ dolorous
 sorrowful
 disparate
 blunder
-estranged
 dissemble
 frenetic = fieberhaft
 cachet = prestige
@@ -451,3 +450,4 @@ agony = Agonie, (Höllen)(Todes)Qual(en), Schmerz(en), Tortur, Leid(en)
 humiliation = Demütigung, Erniedrigung
 excruciating = unerträglich, quälend, schmerzhaft, qualvoll, entsetzlich
 epiphany = Offenbarung, Erleuchtung
+to curse = fluchen

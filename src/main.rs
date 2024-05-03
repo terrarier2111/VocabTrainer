@@ -1,21 +1,18 @@
 #![feature(string_remove_matches)]
 
-use std::{io::Write, fs, sync::{Arc, Mutex}, collections::{HashMap, HashSet}, ops::Deref, error::Error, fmt::Display, path::PathBuf};
+use std::{io::Write, fs, sync::{Arc, Mutex}, collections::{HashMap, HashSet}, error::Error, fmt::Display, path::PathBuf};
 
-use cli_core::CommandImpl;
-use cmd_line::{Window, CmdLineInterface, FallbackHandler};
+use clitty::{core::{CmdParamNumConstraints, CmdParamStrConstraints, CommandBuilder, CommandImpl, CommandParam, CommandParamTy, UsageBuilder}, ui::{CLIBuilder, CmdLineInterface, FallbackHandler, PrintFallback, Window}};
 use config::{LearnSetConfig, Set, MetaEntry, QuestioningMode, Word};
 use crossterm::style::Stylize;
 use dashmap::DashMap;
 use rand::Rng;
-use utils::{input, count_occourances, calculate_hash};
+use utils::{count_occourances, calculate_hash};
 
-use crate::{cmd_line::{CLIBuilder, PrintFallback}, config::{LearnSetMeta, Questioning, Amount, Direction}, cli_core::{CommandBuilder, CommandParamTy, CmdParamStrConstraints, UsageBuilder, CommandParam}};
+use crate::config::{LearnSetMeta, Questioning, Amount, Direction};
 
 mod utils;
 mod config;
-mod cmd_line;
-mod cli_core;
 
 pub fn dir() -> PathBuf {
     // dirs::executable_dir().unwrap().join("./VocabTrainer")
@@ -30,7 +27,7 @@ fn cache() -> PathBuf {
 fn main() -> anyhow::Result<()> {
     let dir = dir();
     let cache = cache();
-    std::fs::create_dir_all(&cache);
+    std::fs::create_dir_all(&cache).unwrap();
     let mut sets = vec![];
     for set in dir.read_dir().unwrap() {
         let set = set.unwrap();
@@ -58,7 +55,7 @@ fn main() -> anyhow::Result<()> {
                         ignore_errors: false,
                     }).unwrap().as_bytes()).unwrap();
                 }
-                let mut cfg: LearnSetConfig = serde_json::from_slice(&fs::read(config)?)?;
+                let cfg: LearnSetConfig = serde_json::from_slice(&fs::read(config)?)?;
                 let mut meta: LearnSetMeta = if meta.exists() {
                     serde_json::from_slice(&fs::read(meta)?)?
                 } else {
@@ -124,11 +121,11 @@ fn main() -> anyhow::Result<()> {
                                 let mut meta = {
                                     for entry in entries.iter() {
                                         entry_set.insert(entry.0);
-                                        let mut entries = meta.entries.order_mut().unwrap();
+                                        let entries = meta.entries.order_mut().unwrap();
                                         // ensure metadata is up-to-date
-                                        let mut entry_ref = entries.entry(entry.0);
+                                        let entry_ref = entries.entry(entry.0);
                                         let hash = calculate_hash(&entry.1) as usize;
-                                        let mut val = entry_ref.or_insert_with(|| {
+                                        let val = entry_ref.or_insert_with(|| {
                                             outdated = true;
                                             (hash, MetaEntry {
                                                 successes: 0,
@@ -143,7 +140,7 @@ fn main() -> anyhow::Result<()> {
                                     }
                                     meta
                                 };
-                                let mut meta_entries = meta.entries.order_mut().unwrap();
+                                let meta_entries = meta.entries.order_mut().unwrap();
                                 if meta_entries.len() != entries.len() {                
                                     // cleanup vacant entries            
                                     meta_entries.retain(|key, _| {
@@ -181,8 +178,8 @@ fn main() -> anyhow::Result<()> {
                                 let left = left.trim();
                                 let right = right.trim();
                                 let left_parts = left.split(',').map(|s| s.trim().to_owned()).collect::<Vec<_>>();
-                                let mut key = trim_whitespaces(&s.to_lowercase());
-                                let mut entries = meta.entries.kv_mut().unwrap();
+                                let key = trim_whitespaces(&s.to_lowercase());
+                                let entries = meta.entries.kv_mut().unwrap();
                                 // ensure metadata is up-to-date
                                 if !entries.contains_key(&key) {
                                     entries.insert(key.clone(), MetaEntry {
@@ -203,7 +200,7 @@ fn main() -> anyhow::Result<()> {
                             }
                         }).filter(|e| !e.0.1.is_empty() && !e.1.is_empty()).collect::<Vec<_>>();
                         if !err {
-                            let mut meta_entries = meta.entries.kv_mut().unwrap();
+                            let meta_entries = meta.entries.kv_mut().unwrap();
                             if meta_entries.len() != entries.len() {                            
                                 meta_entries.retain(|key, _| {
                                     let retain = entry_set.contains(key);
@@ -236,12 +233,12 @@ fn main() -> anyhow::Result<()> {
             CommandBuilder::new("sets", CmdSets),
         ).command(
             CommandBuilder::new("learn", CmdLearn).params(UsageBuilder::new().required(CommandParam {
-                name: "set".to_string(),
+                name: "set",
                 ty: CommandParamTy::String(CmdParamStrConstraints::None),
             }))
-        ).fallback(Box::new(PrintFallback("Please use `help` in order to learn which commands are available".red().to_string()))))),
+        ).fallback(Box::new(PrintFallback::new("Please use `help` in order to learn which commands are available".red().to_string()))))),
         sets: {
-            let mut map = DashMap::new();
+            let map = DashMap::new();
             for set in sets {
                 map.insert(set.name.to_lowercase(), set);
             }
@@ -249,7 +246,7 @@ fn main() -> anyhow::Result<()> {
         },
         learn_instance: Mutex::new(None),
     });
-    ctx.cmd_line.println(&format!("Found {} sets", set_cnt)).unwrap();
+    ctx.cmd_line.println(&format!("Found {} sets", set_cnt));
     loop {
         ctx.cmd_line.await_input(&ctx);
     }
@@ -267,7 +264,7 @@ fn trim_whitespaces(s: &str) -> String {
 }
 
 pub struct TrainingCtx {
-    cmd_line: CmdLineInterface,
+    cmd_line: CmdLineInterface<Arc<TrainingCtx>>,
     sets: DashMap<String, Set>,
     learn_instance: Mutex<Option<LearnInstance>>,
 }
@@ -286,13 +283,13 @@ impl CommandImpl for CmdHelp {
     type CTX = Arc<TrainingCtx>;
 
     fn execute(&self, ctx: &Arc<TrainingCtx>, _input: &[&str]) -> anyhow::Result<()> {
-        ctx.cmd_line.println(format!("Commands ({}):", ctx.cmd_line.cmds().len()).as_str());
+        ctx.cmd_line.println(format!("Commands ({}):", ctx.cmd_line.cmds().size_hint().0).as_str());
 
-        for cmd in ctx.cmd_line.cmds().deref() {
-            if let Some(desc) = cmd.1.desc() {
-                ctx.cmd_line.println(format!("{}: {}", cmd.1.name(), desc).as_str());
+        for cmd in ctx.cmd_line.cmds() {
+            if let Some(desc) = cmd.desc() {
+                ctx.cmd_line.println(format!("{}: {}", cmd.name(), desc).as_str());
             } else {
-                ctx.cmd_line.println(format!("{}", cmd.1.name()).as_str());
+                ctx.cmd_line.println(format!("{}", cmd.name()).as_str());
             }
         }
         Ok(())
@@ -306,7 +303,7 @@ impl CommandImpl for CmdSets {
 
     fn execute(&self, ctx: &Self::CTX, _input: &[&str]) -> anyhow::Result<()> {
         for set in ctx.sets.iter() {
-            ctx.cmd_line.println(&format!("Found {}: {:?}", set.value().name, set.value().kind)).unwrap();
+            ctx.cmd_line.println(&format!("Found set \"{}\": {:?}", set.value().name, set.value().kind));
         }
         Ok(())
     }
@@ -345,11 +342,11 @@ impl CommandImpl for CmdLearn {
                 ctx.cmd_line.push_screen(Window::new(CLIBuilder::new().command(
                     CommandBuilder::new("$end", CmdLearnEnd)
                 ).command(CommandBuilder::new("$subset", CmdSubset).params(UsageBuilder::new().required(CommandParam {
-                    name: "size".to_string(),
-                    ty: CommandParamTy::Int(cli_core::CmdParamNumConstraints::None),
+                    name: "size",
+                    ty: CommandParamTy::Int(CmdParamNumConstraints::None),
                 }))).fallback(Box::new(InputFallback)).prompt(prompt).on_close(Box::new(|ctx| {
                     let mut instance = ctx.learn_instance.lock().unwrap();
-                    let mut instance = instance.as_mut().unwrap();
+                    let instance = instance.as_mut().unwrap();
                     instance.subset_mask.clear();
                     if instance.success == 0 || instance.failed == 0 {
                         ctx.cmd_line.println(&format!("You learned {}/{} vocabs successfully", instance.success, instance.success + instance.failed));
@@ -430,17 +427,16 @@ impl Error for SetLimitError {}
 
 struct InputFallback;
 
-impl FallbackHandler for InputFallback {
-    fn handle(&self, input: String, window: &Window, ctx: &Arc<TrainingCtx>) -> anyhow::Result<bool> {
+impl FallbackHandler<Arc<TrainingCtx>> for InputFallback {
+    fn handle(&self, input: String, window: &Window<Arc<TrainingCtx>>, ctx: &Arc<TrainingCtx>) -> anyhow::Result<bool> {
         let mut learn_instance = ctx.learn_instance.lock().unwrap();
         if let Some(learn_instance) = learn_instance.as_mut() {
-            let mut set = ctx.sets.get_mut(&learn_instance.set).unwrap();
+            let set = ctx.sets.get_mut(&learn_instance.set).unwrap();
             {
-                let mut config = &mut set.config;
                 let mut meta = set.meta.lock().unwrap();
                 meta.tries += 1;
                 let tries = meta.tries;
-                let mut entry = meta.entries.get_entry_mut(&learn_instance.curr_word).unwrap();
+                let entry = meta.entries.get_entry_mut(&learn_instance.curr_word).unwrap();
                 entry.tries += 1;
                 entry.last_presented = tries;
                 if learn_instance.curr_word.matches(input.trim()) {
@@ -451,7 +447,6 @@ impl FallbackHandler for InputFallback {
                     }
                     learn_instance.success += 1;
                     entry.successes += 1;
-                    drop(entry);
                     meta.successes += 1;
                 } else {
                     window.println(&format!("\"{}\" is wrong, correct answers are {}", input, learn_instance.curr_word.value()).red().to_string());
