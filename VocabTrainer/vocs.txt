@@ -459,3 +459,4 @@ vexed = verärgert, leidig, bekümmert, gereizt
 overt = offensichtlich, offenkundig, offen
 reprecautions = Vorsichtsmaßnahmen
 colluding = konspirierend
+admittance = Zulassung, Eintritt, Aufnahme
