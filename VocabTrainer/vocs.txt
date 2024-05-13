@@ -456,3 +456,6 @@ eldritch = unheimlich, schauerlich, gespenstisch, überirdisch
 crest = Wappen, Kamm, Krone, Gipfel, Bergrücken, Kuppe, Scheitel
 formidable = beeindurckend, beachtlich, enorm
 vexed = verärgert, leidig, bekümmert, gereizt
+overt = offensichtlich, offenkundig, offen
+reprecautions = Vorsichtsmaßnahmen
+colluding = konspirierend
