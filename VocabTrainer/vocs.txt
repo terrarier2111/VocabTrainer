@@ -462,3 +462,4 @@ colluding = konspirierend
 admittance = Zulassung, Eintritt, Aufnahme
 instigate = anstiften, anzetteln, anregen
 (to )abide = bleiben, wohnen, etw. ertragen, ausstehen
+assailed = überfallen, angegriffen, gestürmt
