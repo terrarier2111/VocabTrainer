@@ -1,5 +1,8 @@
-use std::{io::{Error, ErrorKind, Write}, fmt::Display, hash::{DefaultHasher, Hasher}};
-
+use std::{
+    fmt::Display,
+    hash::{DefaultHasher, Hasher},
+    io::{Error, ErrorKind, Write},
+};
 
 pub fn input<F: Display>(text: F) -> anyhow::Result<String> {
     print!("{}", text);

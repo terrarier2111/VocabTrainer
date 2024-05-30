@@ -1,9 +1,18 @@
-use std::{fmt::{Debug, Display}, collections::HashMap, sync::Mutex, io::Write as IOWrite, ops::Deref};
+use std::{
+    collections::HashMap,
+    fmt::{Debug, Display, Write},
+    io::Write as IOWrite,
+    ops::Deref,
+    sync::Mutex,
+};
 
 use rand::Rng;
 use serde_derive::{Deserialize, Serialize};
 
-use crate::{utils::{count_occourances, four_to_pow, largest_pow_of_four}, dir};
+use crate::{
+    dir,
+    utils::{count_occourances, four_to_pow, largest_pow_of_four},
+};
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct LearnSetConfig {
@@ -28,7 +37,7 @@ pub enum QuestioningMode {
     // VAL     -> implicit id
     Order,
     // possible formats for sets of the following modes:
-    // VAL, VAL, VAL, ... = VAL, VAL, ... 
+    // VAL, VAL, VAL, ... = VAL, VAL, ...
     KV,
 }
 
@@ -53,7 +62,6 @@ pub struct Set {
 }
 
 impl Set {
-
     const METRIC_ACCURACY_MAX: f64 = 0.950;
     const METRIC_MOST_RECENT_MAX: f64 = 0.500;
     const METRIC_OVERALL_MAX: f64 = 0.975; // TODO: make these values depend on the size of the set!
@@ -78,53 +86,66 @@ impl Set {
                 let val = orders.get(idx).unwrap();
                 Word::Order {
                     key: (val.0, OrderOrNames::Order(val.0)),
-                    value: OrderOrNames::Name((vec![val.1.clone()], self.config.questioning.expected_amount)),
+                    value: OrderOrNames::Name((
+                        vec![val.1.clone()],
+                        self.config.questioning.expected_amount,
+                    )),
                 }
             }
-            SetKind::KV(pairs) => {
-                loop {
-                    let idx = if subset.is_empty() {
-                        rand::thread_rng().gen_range(0..(pairs.len()))
-                    } else {
-                        subset[rand::thread_rng().gen_range(0..(subset.len()))]
-                    };
-                    let val = &pairs[idx];
-                    let meta = self.meta.lock().unwrap();
-                    let entry = meta.entries.kv().unwrap().get(&val.0.0).unwrap();
-                    let success_rate = entry.successes as f64 / (entry.tries as f64).max(1.0);
-                    let avg_success_rate = meta.successes as f64 / (meta.tries as f64).max(1.0);
-                    let normalized_rate = if success_rate > avg_success_rate {
-                        success_rate.sqrt()
-                    } else {
-                        success_rate.powi(2)
-                    };
-                    let success_range = normalized_rate * Self::METRIC_ACCURACY_MAX;
-                    let recency_range = Self::METRIC_MOST_RECENT_MAX / (meta.tries as f64 - entry.last_presented as f64).max(1.0).powi(2);
-                    let skip_range = (success_range + recency_range).min(Self::METRIC_OVERALL_MAX);
-                    if rand::thread_rng().gen::<f64>() <= skip_range {
-                        continue;
-                    }
-                    let questioning = &self.config.questioning;
-                    break match questioning.mode {
-                        QuestioningMode::KV => {
-                            let left_given = questioning.given_direction == Direction::Left || (questioning.given_direction == Direction::Bi && rand::thread_rng().gen_range(0..=1) == 0);
-                            let (key, val) = if left_given {
-                                (val.0.clone(), val.1.clone())
-                            } else {
-                                ((val.0.0.clone(), val.1.clone()), val.0.1.clone())
-                            };
-                            let key = {
-                                if questioning.given_amount == Amount::All {
-                                    key
-                                } else {
-                                    (key.0, vec![key.1[rand::thread_rng().gen_range(0..(key.1.len()))].clone()])
-                                }
-                            };
-                            Word::KV { key, value: (val, questioning.expected_amount) }
-                        },
-                        QuestioningMode::Order => unreachable!(),
-                    };
+            SetKind::KV(pairs) => loop {
+                let idx = if subset.is_empty() {
+                    rand::thread_rng().gen_range(0..(pairs.len()))
+                } else {
+                    subset[rand::thread_rng().gen_range(0..(subset.len()))]
+                };
+                let val = &pairs[idx];
+                let meta = self.meta.lock().unwrap();
+                let entry = meta.entries.kv().unwrap().get(&val.0 .0).unwrap();
+                let success_rate = entry.successes as f64 / (entry.tries as f64).max(1.0);
+                let avg_success_rate = meta.successes as f64 / (meta.tries as f64).max(1.0);
+                let normalized_rate = if success_rate > avg_success_rate {
+                    success_rate.sqrt()
+                } else {
+                    success_rate.powi(2)
+                };
+                let success_range = normalized_rate * Self::METRIC_ACCURACY_MAX;
+                let recency_range = Self::METRIC_MOST_RECENT_MAX
+                    / (meta.tries as f64 - entry.last_presented as f64)
+                        .max(1.0)
+                        .powi(2);
+                let skip_range = (success_range + recency_range).min(Self::METRIC_OVERALL_MAX);
+                if rand::thread_rng().gen::<f64>() <= skip_range {
+                    continue;
                 }
+                let questioning = &self.config.questioning;
+                break match questioning.mode {
+                    QuestioningMode::KV => {
+                        let left_given = questioning.given_direction == Direction::Left
+                            || (questioning.given_direction == Direction::Bi
+                                && rand::thread_rng().gen_range(0..=1) == 0);
+                        let (key, val) = if left_given {
+                            (val.0.clone(), val.1.clone())
+                        } else {
+                            ((val.0 .0.clone(), val.1.clone()), val.0 .1.clone())
+                        };
+                        let key = {
+                            if questioning.given_amount == Amount::All {
+                                key
+                            } else {
+                                (
+                                    key.0,
+                                    vec![key.1[rand::thread_rng().gen_range(0..(key.1.len()))]
+                                        .clone()],
+                                )
+                            }
+                        };
+                        Word::KV {
+                            key,
+                            value: (val, questioning.expected_amount),
+                        }
+                    }
+                    QuestioningMode::Order => unreachable!(),
+                };
             },
         }
     }
@@ -132,15 +153,24 @@ impl Set {
     /// safe the config on disk
     pub fn save_cfg(&self) {
         let cfg = dir().join(&format!("{}.json", self.name));
-        std::fs::File::create(cfg).unwrap().write_all(serde_json::to_string(&self.config).unwrap().as_bytes()).unwrap();
+        std::fs::File::create(cfg)
+            .unwrap()
+            .write_all(serde_json::to_string(&self.config).unwrap().as_bytes())
+            .unwrap();
     }
 
     /// safe the meta data on disk
     pub fn save_meta(&self) {
         let meta = dir().join("cache").join(&format!("{}.json", self.name));
-        std::fs::File::create(meta).unwrap().write_all(serde_json::to_string(self.meta.lock().unwrap().deref()).unwrap().as_bytes()).unwrap();
+        std::fs::File::create(meta)
+            .unwrap()
+            .write_all(
+                serde_json::to_string(self.meta.lock().unwrap().deref())
+                    .unwrap()
+                    .as_bytes(),
+            )
+            .unwrap();
     }
-
 }
 
 #[derive(Debug)]
@@ -154,20 +184,18 @@ pub struct Key<'a>(&'a Word);
 impl<'a> Display for Key<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self.0 {
-            Word::Order { key, .. } => {
-                match &key.1 {
-                    OrderOrNames::Order(order) => f.write_str(order.to_string().as_str()),
-                    OrderOrNames::Name(name) => {
-                        let mut iter = name.0.iter();
-                        f.write_str(iter.next().unwrap())?;
-                        for key in iter {
-                            f.write_str(", ")?;
-                            f.write_str(key)?;
-                        }
-                        Ok(())
-                    },
+            Word::Order { key, .. } => match &key.1 {
+                OrderOrNames::Order(order) => f.write_str(order.to_string().as_str()),
+                OrderOrNames::Name(name) => {
+                    let mut iter = name.0.iter();
+                    f.write_str(iter.next().unwrap())?;
+                    for key in iter {
+                        f.write_str(", ")?;
+                        f.write_str(key)?;
+                    }
+                    Ok(())
                 }
-            }
+            },
             Word::KV { key, .. } => {
                 let mut iter = key.1.iter();
                 f.write_str(iter.next().unwrap())?;
@@ -176,7 +204,7 @@ impl<'a> Display for Key<'a> {
                     f.write_str(key)?;
                 }
                 Ok(())
-            },
+            }
         }
     }
 }
@@ -186,29 +214,29 @@ pub struct Value<'a>(&'a Word);
 impl<'a> Display for Value<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self.0 {
-            Word::Order { value, .. } => {
-                match value {
-                    OrderOrNames::Order(order) => f.write_str(order.to_string().as_str()),
-                    OrderOrNames::Name(names) => {
-                        let mut iter = names.0.iter();
-                        f.write_str(iter.next().unwrap())?;
-                        for val in iter {
-                            f.write_str(", ")?;
-                            f.write_str(val)?;
-                        }
-                        Ok(())
-                    },
+            Word::Order { value, .. } => match value {
+                OrderOrNames::Order(order) => f.write_str(order.to_string().as_str()),
+                OrderOrNames::Name(names) => {
+                    let mut iter = names.0.iter();
+                    f.write_str(iter.next().unwrap())?;
+                    for val in iter {
+                        f.write_str(", ")?;
+                        f.write_str(val)?;
+                    }
+                    Ok(())
                 }
-            }
+            },
             Word::KV { value, .. } => {
                 let mut iter = value.0.iter();
+                f.write_char('\"')?;
                 f.write_str(iter.next().unwrap())?;
                 for val in iter {
-                    f.write_str(", ")?;
+                    f.write_str("\", \"")?;
                     f.write_str(val)?;
                 }
+                f.write_char('\"')?;
                 Ok(())
-            },
+            }
         }
     }
 }
@@ -225,7 +253,6 @@ pub enum Word {
 }
 
 impl Word {
-
     // FIXME: introduce exclusive braces (braces in which only a single subbrace may be present at a time) ´[(te()xt(())eee),(text2)]´
     pub fn matches(&self, raw: &str) -> bool {
         // fun fact: this even supports multiple braces
@@ -299,7 +326,10 @@ impl Word {
                         continue;
                     }
                     last_skipped = false;
-                    matches |= raw_chars.next().map(|r_chr| chr.eq_ignore_ascii_case(&r_chr)).unwrap_or(false);
+                    matches |= raw_chars
+                        .next()
+                        .map(|r_chr| chr.eq_ignore_ascii_case(&r_chr))
+                        .unwrap_or(false);
                 }
             }
             matches
@@ -307,20 +337,25 @@ impl Word {
 
         match self {
             // TODO: support other questioning modes!
-            Word::Order { key, value } => raw.parse::<usize>().map(|input| input == key.0).unwrap_or(false),
+            Word::Order { key, value } => raw
+                .parse::<usize>()
+                .map(|input| input == key.0)
+                .unwrap_or(false),
             Word::KV { key, value } => {
                 match value.1 {
                     Amount::All => todo!(),
-                    Amount::Any => value.0.iter().any(|value| value.eq_ignore_ascii_case(raw) || {
-                        if value.contains('(') && value.contains(')') {
-                            // this matching allows "just in time" or "in time" for this given value "(just) in time"
-                            matches_braces(raw, value)
-                        } else {
-                            false
+                    Amount::Any => value.0.iter().any(|value| {
+                        value.eq_ignore_ascii_case(raw) || {
+                            if value.contains('(') && value.contains(')') {
+                                // this matching allows "just in time" or "in time" for this given value "(just) in time"
+                                matches_braces(raw, value)
+                            } else {
+                                false
+                            }
                         }
                     }),
                 }
-            },
+            }
         }
     }
 
@@ -343,7 +378,6 @@ impl Word {
     pub fn value(&self) -> Value<'_> {
         Value(self)
     }
-
 }
 
 #[derive(Clone)]
@@ -377,7 +411,6 @@ pub enum LearnSetMetaEntries {
 }
 
 impl LearnSetMetaEntries {
-
     #[inline]
     pub fn kv(&self) -> Option<&HashMap<String, MetaEntry>> {
         match self {
@@ -435,7 +468,6 @@ impl LearnSetMetaEntries {
             },
         }
     }
-
 }
 
 #[derive(Serialize, Deserialize)]
