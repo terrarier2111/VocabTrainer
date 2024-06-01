@@ -53,3 +53,17 @@ pub fn calculate_hash<T: std::hash::Hash>(t: &T) -> u64 {
     t.hash(&mut s);
     s.finish()
 }
+
+/// a short, branchless algorithm that is eqivalent to
+/// if num > 0:
+///    ret 1
+/// else:
+///    ret 0
+#[inline]
+pub const fn greater_zero_ret_one_3(num: usize) -> usize {
+    const MSB_OFF: usize = (usize::BITS - 1) as usize;
+
+    // if num is 0, identity will have a value of 0 as all bits are 0, for other values, this will overflow.
+    let identity = 0_usize - num;
+    identity >> MSB_OFF
+}

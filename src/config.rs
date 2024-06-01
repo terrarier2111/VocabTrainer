@@ -253,88 +253,97 @@ pub enum Word {
 }
 
 impl Word {
-    // FIXME: introduce exclusive braces (braces in which only a single subbrace may be present at a time) ´[(te()xt(())eee),(text2)]´
-    pub fn matches(&self, raw: &str) -> bool {
-        // fun fact: this even supports multiple braces
-        fn matches_braces(raw: &str, val: &str) -> bool {
-            const STATE_NOOP: u8 = 0;
-            const STATE_DEL_BRACE: u8 = 1;
-            const STATE_DEL_CONTENT: u8 = 2;
-            const STATE_DEL_FOLLOWING_WHITESPACE: u8 = 3;
 
-            const STATE_CNT: usize = 4;
+    pub fn matches_braces(raw: &str, value: &str) -> bool {
+        const BRACE_TY_NO_BRACE: usize = 0;
+        const BRACE_TY_ROUND: usize = 1;
+        const BRACE_TY_BRACKET: usize = 2;
+        const BRACE_TY_CURLY: usize = 3;
 
-            let braces = count_occourances(val, '(');
-            // fast path
-            if braces == 0 {
-                return false;
-            }
-            let mut state_vec = vec![0_u8; braces];
-            let mut matches = false;
-
-            // ensure we have exactly 4 states
-            assert_eq!(STATE_CNT, 4);
-
-            for cnt in 0..(four_to_pow(braces)) {
-                let cnt = largest_pow_of_four(cnt);
-                let val_chars = val.chars();
-                let mut raw_chars = raw.chars();
-                let mut open = vec![];
-                let mut last_skipped = false;
-                let mut brace_idx = 0;
-                let mut open_cnt = 0;
-                let mut skip_content = 0;
-
-                // simulate an increment over the (bit)state vector
-                for b in 0..state_vec.len() {
-                    if state_vec[b] == STATE_DEL_FOLLOWING_WHITESPACE {
-                        state_vec[b] = STATE_NOOP;
-                        continue;
+        let braces = {
+            let mut res = vec![];
+            let mut stack = vec![];
+            let mut no_brace_start = usize::MAX;
+            // FIXME: insert chhunks at `(` and not at `)`
+            for (i, chr) in value.chars().enumerate() {
+                if chr == '(' {
+                    if no_brace_start != usize::MAX {
+                        res.push((BRACE_TY_NO_BRACE, no_brace_start, i));
+                        no_brace_start = usize::MAX;
                     }
-                    state_vec[b] += 1;
-                    break;
-                }
-                for chr in val_chars {
-                    if chr == '(' {
-                        let state = state_vec[brace_idx];
-                        open.push(state);
-                        if state == STATE_DEL_CONTENT {
-                            skip_content += 1;
-                        }
-                        brace_idx += 1;
-                        if state == STATE_DEL_BRACE || state == STATE_DEL_CONTENT {
-                            continue;
-                        }
+                    stack.push((BRACE_TY_ROUND, i + 1));
+                } else if chr == '[' {
+                    if no_brace_start != usize::MAX {
+                        res.push((BRACE_TY_NO_BRACE, no_brace_start, i));
+                        no_brace_start = usize::MAX;
                     }
-                    if chr == ')' {
-                        let state = open.pop().unwrap();
-                        if state == STATE_DEL_CONTENT {
-                            skip_content -= 1;
-                        }
-                        if state == STATE_DEL_FOLLOWING_WHITESPACE {
-                            last_skipped = true;
-                        }
-                        if state == STATE_DEL_BRACE || state == STATE_DEL_CONTENT {
-                            continue;
-                        }
+                    stack.push((BRACE_TY_BRACKET, i + 1));
+                } else if chr == '{' {
+                    if no_brace_start != usize::MAX {
+                        res.push((BRACE_TY_NO_BRACE, no_brace_start, i));
+                        no_brace_start = usize::MAX;
                     }
-                    if skip_content != 0 {
-                        last_skipped = true;
-                        continue;
-                    }
-                    if chr.is_whitespace() && last_skipped {
-                        continue;
-                    }
-                    last_skipped = false;
-                    matches |= raw_chars
-                        .next()
-                        .map(|r_chr| chr.eq_ignore_ascii_case(&r_chr))
-                        .unwrap_or(false);
+                    stack.push((BRACE_TY_CURLY, i + 1));
+                } else if chr == ')' {
+                    let val = stack.pop().unwrap();
+                    assert_eq!(val.0, BRACE_TY_ROUND);
+                    res.push((BRACE_TY_ROUND, val.1, i));
+                } else if chr == ']' {
+                    let val = stack.pop().unwrap();
+                    assert_eq!(val.0, BRACE_TY_BRACKET);
+                    res.push((BRACE_TY_BRACKET, val.1, i));
+                } else if chr == '}' {
+                    let val = stack.pop().unwrap();
+                    assert_eq!(val.0, BRACE_TY_CURLY);
+                    res.push((BRACE_TY_CURLY, val.1, i));
+                } else if stack.is_empty() && no_brace_start == usize::MAX {
+                    no_brace_start = i;
                 }
             }
-            matches
+            if no_brace_start != usize::MAX {
+                res.push((BRACE_TY_NO_BRACE, no_brace_start, value.len()));
+            }
+            assert!(stack.is_empty());
+            res
+        };
+        let mut base = raw.to_string();
+        // FIXME: there is a bug in here where when there is a large brace and a smaller brace containd inside the larger brace at its end, it wont detect the thing as working
+        // as it will detect that the whole large brace is larger than the provided input because of the braces
+        for brace in braces.into_iter().rev() {
+            if brace.0 == BRACE_TY_NO_BRACE {
+                let chunk_size = brace.2 - brace.1;
+                println!("check for chunk: {}", &value[brace.1..brace.2]);
+                if base.len() >= chunk_size && base[(base.len() - chunk_size)..] == value[brace.1..brace.2] {
+                    base = base[..(base.len() - chunk_size)].to_string();
+                    println!("success!");
+                } else {
+                    return false;
+                }
+            } else if brace.0 == BRACE_TY_ROUND {
+                let chunk_size = brace.2 - brace.1;
+                println!("check for braced chunk: {}", &value[brace.1..brace.2]);
+                let final_off = {
+                    if base.chars().next_back() == Some(' ') {
+                        1
+                    } else {
+                        0
+                    }
+                };
+                if base.len() >= chunk_size && base[(base.len() - chunk_size/* - final_off*/)..(base.len() - final_off)] == value[brace.1..brace.2] {
+                    base = base[..(base.len() - chunk_size - final_off)].to_string();
+                    println!("success!");
+                } else if base.len() >= (chunk_size - 2) && base[(base.len() - (chunk_size - 2)/* - final_off*/)..] == value[(brace.1 + 1)..(brace.2 - 1)] {
+                    base = base[..(base.len() - (chunk_size - 2) - final_off)].to_string();
+                    println!("success!");
+                }
+            } else if brace.0 == BRACE_TY_BRACKET {
+
+            }
         }
+        base.is_empty()
+    }
 
+    pub fn matches(&self, raw: &str) -> bool {
         match self {
             // TODO: support other questioning modes!
             Word::Order { key, value } => raw
@@ -348,7 +357,7 @@ impl Word {
                         value.eq_ignore_ascii_case(raw) || {
                             if value.contains('(') && value.contains(')') {
                                 // this matching allows "just in time" or "in time" for this given value "(just) in time"
-                                matches_braces(raw, value)
+                                Self::matches_braces(raw, value)
                             } else {
                                 false
                             }
@@ -475,4 +484,11 @@ pub struct MetaEntry {
     pub successes: usize,
     pub tries: usize,
     pub last_presented: usize,
+}
+
+#[derive(PartialEq, Debug)]
+enum Restriction {
+    None,
+    Min,
+    Max,
 }
