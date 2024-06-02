@@ -322,18 +322,11 @@ impl Word {
             } else if brace.0 == BRACE_TY_ROUND {
                 let chunk_size = brace.2 - brace.1;
                 println!("check for braced chunk: {}", &value[brace.1..brace.2]);
-                let final_off = {
-                    if base.chars().next_back() == Some(' ') {
-                        1
-                    } else {
-                        0
-                    }
-                };
-                if base.len() >= chunk_size && base[(base.len() - chunk_size/* - final_off*/)..(base.len() - final_off)] == value[brace.1..brace.2] {
-                    base = base[..(base.len() - chunk_size - final_off)].to_string();
+                if base.len() >= chunk_size && base[(base.len() - chunk_size)..base.len()] == value[brace.1..brace.2] {
+                    base = base[..(base.len() - chunk_size)].to_string();
                     println!("success!");
-                } else if base.len() >= (chunk_size - 2) && base[(base.len() - (chunk_size - 2)/* - final_off*/)..] == value[(brace.1 + 1)..(brace.2 - 1)] {
-                    base = base[..(base.len() - (chunk_size - 2) - final_off)].to_string();
+                } else if base.len() >= (chunk_size - 2) && base[(base.len() - (chunk_size - 2))..] == value[(brace.1 + 1)..(brace.2 - 1)] {
+                    base = base[..(base.len() - (chunk_size - 2))].to_string();
                     println!("success!");
                 }
             } else if brace.0 == BRACE_TY_BRACKET {
