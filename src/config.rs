@@ -252,88 +252,82 @@ pub enum Word {
     },
 }
 
+const BRACE_TY_NO_BRACE: usize = 0;
+const BRACE_TY_ROUND: usize = 1;
+const BRACE_TY_BRACKET: usize = 2;
+const BRACE_TY_CURLY: usize = 3;
+
 impl Word {
 
     pub fn matches_braces(raw: &str, value: &str) -> bool {
-        const BRACE_TY_NO_BRACE: usize = 0;
-        const BRACE_TY_ROUND: usize = 1;
-        const BRACE_TY_BRACKET: usize = 2;
-        const BRACE_TY_CURLY: usize = 3;
-
         let braces = {
-            let mut res = vec![];
-            let mut stack = vec![];
+            let mut ctx = BraceCtx { resolved: vec![], stack: vec![] };
             let mut no_brace_start = usize::MAX;
             // FIXME: insert chhunks at `(` and not at `)`
             for (i, chr) in value.chars().enumerate() {
                 if chr == '(' {
                     if no_brace_start != usize::MAX {
-                        res.push((BRACE_TY_NO_BRACE, no_brace_start, i));
+                        ctx.push_text(no_brace_start, i);
                         no_brace_start = usize::MAX;
                     }
-                    stack.push((BRACE_TY_ROUND, i + 1));
+                    ctx.resolved.push(Element::Frame { ty: BRACE_TY_ROUND, stack: vec![] });
+                    ctx.stack.push(BRACE_TY_ROUND);
                 } else if chr == '[' {
                     if no_brace_start != usize::MAX {
-                        res.push((BRACE_TY_NO_BRACE, no_brace_start, i));
+                        ctx.push_text(no_brace_start, i);
                         no_brace_start = usize::MAX;
                     }
-                    stack.push((BRACE_TY_BRACKET, i + 1));
+                    ctx.resolved.push(Element::Frame { ty: BRACE_TY_BRACKET, stack: vec![] });
+                    ctx.stack.push(BRACE_TY_BRACKET);
                 } else if chr == '{' {
                     if no_brace_start != usize::MAX {
-                        res.push((BRACE_TY_NO_BRACE, no_brace_start, i));
+                        ctx.push_text(no_brace_start, i);
                         no_brace_start = usize::MAX;
                     }
-                    stack.push((BRACE_TY_CURLY, i + 1));
+                    ctx.resolved.push(Element::Frame { ty: BRACE_TY_CURLY, stack: vec![] });
+                    ctx.stack.push(BRACE_TY_CURLY);
                 } else if chr == ')' {
-                    let val = stack.pop().unwrap();
-                    assert_eq!(val.0, BRACE_TY_ROUND);
-                    res.push((BRACE_TY_ROUND, val.1, i));
+                    if no_brace_start != usize::MAX {
+                        ctx.push_text(no_brace_start, i);
+                        no_brace_start = usize::MAX;
+                    }
+                    let val = ctx.stack.pop().unwrap();
+                    assert_eq!(val, BRACE_TY_ROUND);
                 } else if chr == ']' {
-                    let val = stack.pop().unwrap();
-                    assert_eq!(val.0, BRACE_TY_BRACKET);
-                    res.push((BRACE_TY_BRACKET, val.1, i));
+                    if no_brace_start != usize::MAX {
+                        ctx.push_text(no_brace_start, i);
+                        no_brace_start = usize::MAX;
+                    }
+                    let val = ctx.stack.pop().unwrap();
+                    assert_eq!(val, BRACE_TY_BRACKET);
                 } else if chr == '}' {
-                    let val = stack.pop().unwrap();
-                    assert_eq!(val.0, BRACE_TY_CURLY);
-                    res.push((BRACE_TY_CURLY, val.1, i));
-                } else if stack.is_empty() && no_brace_start == usize::MAX {
+                    if no_brace_start != usize::MAX {
+                        ctx.push_text(no_brace_start, i);
+                        no_brace_start = usize::MAX;
+                    }
+                    let val = ctx.stack.pop().unwrap();
+                    assert_eq!(val, BRACE_TY_CURLY);
+                } else if no_brace_start == usize::MAX {
                     no_brace_start = i;
                 }
             }
             if no_brace_start != usize::MAX {
-                res.push((BRACE_TY_NO_BRACE, no_brace_start, value.len()));
+                ctx.push_text(no_brace_start, value.len());
             }
-            assert!(stack.is_empty());
-            res
+            assert!(ctx.stack.is_empty());
+            ctx.resolved
         };
-        let mut base = raw.to_string();
         // FIXME: there is a bug in here where when there is a large brace and a smaller brace containd inside the larger brace at its end, it wont detect the thing as working
         // as it will detect that the whole large brace is larger than the provided input because of the braces
-        for brace in braces.into_iter().rev() {
-            if brace.0 == BRACE_TY_NO_BRACE {
-                let chunk_size = brace.2 - brace.1;
-                println!("check for chunk: {}", &value[brace.1..brace.2]);
-                if base.len() >= chunk_size && base[(base.len() - chunk_size)..] == value[brace.1..brace.2] {
-                    base = base[..(base.len() - chunk_size)].to_string();
-                    println!("success!");
-                } else {
-                    return false;
-                }
-            } else if brace.0 == BRACE_TY_ROUND {
-                let chunk_size = brace.2 - brace.1;
-                println!("check for braced chunk: {}", &value[brace.1..brace.2]);
-                if base.len() >= chunk_size && base[(base.len() - chunk_size)..base.len()] == value[brace.1..brace.2] {
-                    base = base[..(base.len() - chunk_size)].to_string();
-                    println!("success!");
-                } else if base.len() >= (chunk_size - 2) && base[(base.len() - (chunk_size - 2))..] == value[(brace.1 + 1)..(brace.2 - 1)] {
-                    base = base[..(base.len() - (chunk_size - 2))].to_string();
-                    println!("success!");
-                }
-            } else if brace.0 == BRACE_TY_BRACKET {
-
+        let mut attempts = vec![raw.to_string()];
+        while !attempts.is_empty() {
+            let val = attempts.remove(0);
+            if val.is_empty() {
+                return true;
             }
+            apply_mutations(&braces, &val, &mut attempts, value);
         }
-        base.is_empty()
+       false
     }
 
     pub fn matches(&self, raw: &str) -> bool {
@@ -380,6 +374,80 @@ impl Word {
     pub fn value(&self) -> Value<'_> {
         Value(self)
     }
+}
+
+fn apply_mutations(mutations: &Vec<Element>, val: &String, buf: &mut Vec<String>, pat: &str) {
+    println!("muts: {:?}", mutations);
+    for m in mutations {
+        match m {
+            Element::Frame { ty, stack } => {
+                match *ty {
+                    BRACE_TY_ROUND => {
+                        apply_mutations(stack, val, buf, pat);
+                    },
+                    BRACE_TY_BRACKET => {
+
+                    },
+                    BRACE_TY_CURLY => {
+
+                    },
+                    _ => unreachable!(),
+                }
+            },
+            Element::Final { start_idx, end_idx } => {
+                let chunk_size = *end_idx - *start_idx;
+                if val.len() >= chunk_size && cmp_strs(val, 0, pat, *start_idx, chunk_size) {
+                    println!("sub match!");
+                    let val = String::from_iter(val.chars().skip(chunk_size));
+                    apply_mutations(mutations, &val, buf, pat);
+                    buf.push(val.clone());
+                }
+            },
+        }
+    }
+}
+
+struct BraceCtx {
+    resolved: Vec<Element>,
+    stack: Vec<usize>,
+}
+
+impl BraceCtx {
+
+    fn push_text(&mut self, start_idx: usize, end_idx: usize) {
+        if let Some(last) = self.resolved.last_mut() {
+            match last {
+                Element::Frame { ty, stack } => stack.push(Element::Final { start_idx: start_idx, end_idx }),
+                Element::Final { .. } => self.resolved.push(Element::Final { start_idx, end_idx }),
+            }
+        } else {
+            self.resolved.push(Element::Final { start_idx, end_idx });
+        }
+    }
+
+}
+
+fn cmp_strs(first: &str, off1: usize, second: &str, off2: usize, elems: usize) -> bool {
+    let mut iter1 = first.chars().skip(off1);
+    let mut iter2 = second.chars().skip(off2);
+    for _ in 0..elems {
+        if iter1.next() != iter2.next() {
+            return false;
+        }
+    }
+    true
+}
+
+#[derive(Debug)]
+enum Element {
+    Frame {
+        ty: usize,
+        stack: Vec<Element>,
+    },
+    Final {
+        start_idx: usize,
+        end_idx: usize,
+    },
 }
 
 #[derive(Clone)]
