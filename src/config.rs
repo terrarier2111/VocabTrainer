@@ -258,7 +258,7 @@ const BRACE_TY_CURLY: usize = 3;
 
 impl Word {
 
-    pub fn matches_braces(raw: &str, value: &str) -> bool {
+    fn matches_braces(raw: &str, value: &str) -> bool {
         let braces = {
             let mut ctx = BraceCtx { resolved: vec![], stack: vec![] };
             let mut no_brace_start = usize::MAX;
@@ -401,29 +401,15 @@ fn apply_mutations(mutations: &Vec<Element>, val: &String, buf: &mut Vec<String>
             Element::Final { start_idx, end_idx } => {
                 fn apply_final(mutations: &Vec<Element>, val: &String, buf: &mut Vec<String>, pat: &str, start_idx: usize, end_idx: usize) {
                     let chunk_size = end_idx - start_idx;
-                    println!("testing with {} {}", substring(pat, start_idx, chunk_size), chunk_size);
                     if val.len() >= chunk_size && substring(val, 0, chunk_size) == substring(pat, start_idx, chunk_size) {
-                        println!("sub match!");
                         let val = String::from_iter(val.chars().skip(chunk_size));
-                        println!("val: {val}");
                         apply_mutations(mutations, &val, buf, pat);
                         buf.push(val.clone());
                     }
                 }
-                println!("applying: {}", substring(pat, *start_idx, *end_idx - *start_idx));
                 apply_final(mutations, val, buf, pat, *start_idx, *end_idx);
-                println!("trimming: {} {}", start_idx, end_idx);
                 let trimmed = strip_whitespace(*start_idx, *end_idx - *start_idx, pat);
-                println!("stripped!");
                 if trimmed.0 != *start_idx || trimmed.1 != (*end_idx - *start_idx) {
-                    // check if the char sizes don't even line up (this fixes multi byte characters)
-
-                    // FIXME: this doesn't work properly
-                    println!("pat size: {} val size: {}", size_of_chars(pat, trimmed.0, trimmed.1), size_of_chars(val, 0, trimmed.1));
-                    /*if size_of_chars(pat, trimmed.0, trimmed.1) != size_of_chars(val, 0, trimmed.1) {
-                        continue;
-                    }*/
-                    println!("test with stripped {}", substring(pat, trimmed.0, trimmed.1));
                     let (start_idx, len) = trimmed;
                     let end_idx = start_idx + len;
                     apply_final(mutations, val, buf, pat, start_idx, end_idx);
@@ -454,15 +440,12 @@ fn strip_whitespace(start_idx: usize, len: usize, val: &str) -> (usize, usize) {
     }
     let start = start_idx + add_start;
     let new_len = len - sub_len;
-    println!("original len: {len} new len: {new_len}");
     (start, new_len)
 }
 
 fn substring(src: &str, off: usize, chars: usize) -> &str {
     let start = size_of_chars(src, 0, off);
     let end = start + size_of_chars(src, off, chars);
-    let val = &src[start..end];
-    println!("start {start} end {end} off {off} chars {chars} src {src} result {val}");
     &src[start..end]
 }
 
