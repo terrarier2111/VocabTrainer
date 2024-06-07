@@ -500,7 +500,7 @@ impl BraceCtx {
                         return;
                     }
                 },
-                Element::Final { .. } => self.resolved.push(Element::Final { start_idx, end_idx }),
+                Element::Final { .. } => break,
             }
             i += 1;
         }
