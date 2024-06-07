@@ -401,6 +401,7 @@ fn apply_mutations(mutations: &Vec<Element>, val: &String, buf: &mut Vec<String>
             Element::Final { start_idx, end_idx } => {
                 fn apply_final(mutations: &Vec<Element>, val: &String, buf: &mut Vec<String>, pat: &str, start_idx: usize, end_idx: usize) {
                     let chunk_size = end_idx - start_idx;
+                    println!("testing with {} {}", substring(pat, start_idx, chunk_size), chunk_size);
                     if val.len() >= chunk_size && substring(val, 0, chunk_size) == substring(pat, start_idx, chunk_size) {
                         println!("sub match!");
                         let val = String::from_iter(val.chars().skip(chunk_size));
@@ -409,10 +410,19 @@ fn apply_mutations(mutations: &Vec<Element>, val: &String, buf: &mut Vec<String>
                         buf.push(val.clone());
                     }
                 }
+                println!("applying: {}", substring(pat, *start_idx, *end_idx - *start_idx));
                 apply_final(mutations, val, buf, pat, *start_idx, *end_idx);
                 println!("trimming: {} {}", start_idx, end_idx);
                 let trimmed = strip_whitespace(*start_idx, *end_idx - *start_idx, pat);
+                println!("stripped!");
                 if trimmed.0 != *start_idx || trimmed.1 != (*end_idx - *start_idx) {
+                    // check if the char sizes don't even line up (this fixes multi byte characters)
+
+                    // FIXME: this doesn't work properly
+                    println!("pat size: {} val size: {}", size_of_chars(pat, trimmed.0, trimmed.1), size_of_chars(val, 0, trimmed.1));
+                    /*if size_of_chars(pat, trimmed.0, trimmed.1) != size_of_chars(val, 0, trimmed.1) {
+                        continue;
+                    }*/
                     println!("test with stripped {}", substring(pat, trimmed.0, trimmed.1));
                     let (start_idx, len) = trimmed;
                     let end_idx = start_idx + len;
@@ -424,34 +434,36 @@ fn apply_mutations(mutations: &Vec<Element>, val: &String, buf: &mut Vec<String>
 }
 
 fn strip_whitespace(start_idx: usize, len: usize, val: &str) -> (usize, usize) {
-    let start = {
-        let mut i = 0;
-        let mut iter = val.chars().skip(start_idx);
-        loop {
-            let c = iter.next();
-            if !c.map(|v| v.is_whitespace()).unwrap_or(false) {
-                break;
-            }
-            i += 1;
+    let mut sub_len = 0;
+    let mut add_start = 0;
+    let mut iter = val.chars().skip(start_idx);
+    loop {
+        let c = iter.next();
+        if !c.map(|v| v.is_whitespace()).unwrap_or(false) {
+            break;
         }
-        start_idx + i
-    };
-    let len = {
-        let mut i = 0;
-        let mut iter = val.chars().rev().skip(val.chars().size_hint().0 - (start_idx + len));
-        loop {
-            if !iter.next().map(|v| v.is_whitespace()).unwrap_or(false) {
-                break;
-            }
-            i += 1;
+        add_start += 1;
+        sub_len += 1;
+    }
+    let mut iter = val.chars().rev().skip(val.chars().size_hint().0 - (start_idx + len));
+    loop {
+        if !iter.next().map(|v| v.is_whitespace()).unwrap_or(false) {
+            break;
         }
-        len - i
-    };
-    (start, len)
+        sub_len += 1;
+    }
+    let start = start_idx + add_start;
+    let new_len = len - sub_len;
+    println!("original len: {len} new len: {new_len}");
+    (start, new_len)
 }
 
 fn substring(src: &str, off: usize, chars: usize) -> &str {
-    &src[(size_of_chars(src, 0, off))..(size_of_chars(src, off, chars))]
+    let start = size_of_chars(src, 0, off);
+    let end = start + size_of_chars(src, off, chars);
+    let val = &src[start..end];
+    println!("start {start} end {end} off {off} chars {chars} src {src} result {val}");
+    &src[start..end]
 }
 
 fn size_of_chars(src: &str, off: usize, chars: usize) -> usize {
@@ -459,7 +471,9 @@ fn size_of_chars(src: &str, off: usize, chars: usize) -> usize {
     let mut iter = src.chars().skip(off);
     for _ in 0..chars {
         // FIXME: for some reason this tries one character too much
-        size += char_size(iter.next().unwrap());
+        if let Some(chr) = iter.next() {
+            size += char_size(chr);
+        }
     }
     size
 }
