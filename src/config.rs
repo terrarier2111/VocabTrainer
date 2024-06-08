@@ -318,6 +318,20 @@ impl Word {
             assert!(ctx.stack.is_empty());
             ctx.resolved
         };
+        let min_len = {
+            let mut min_len = 0;
+            for m in braces.iter()  {
+                if let Element::Final { start_idx, end_idx } = m {
+                    min_len += *end_idx - *start_idx;
+                }
+            }
+            min_len
+        };
+        // fail fast if the input isn't even long enough to cover all the required content
+        // this also prevents empty inputs from being accepted
+        if raw.len() < min_len {
+            return false;
+        }
         // FIXME: there is a bug in here where when there is a large brace and a smaller brace containd inside the larger brace at its end, it wont detect the thing as working
         // as it will detect that the whole large brace is larger than the provided input because of the braces
         let mut attempts = vec![raw.to_string()];
@@ -377,7 +391,8 @@ impl Word {
     }
 }
 
-fn apply_mutations(mutations: &Vec<Element>, val: &String, buf: &mut Vec<String>, pat: &str) {
+fn apply_mutations(mutations: &Vec<Element>, val: &str, buf: &mut Vec<String>, pat: &str) {
+    println!("pat: {pat}");
     println!("muts: {:?}", mutations);
     for m in mutations {
         match m {
@@ -399,7 +414,7 @@ fn apply_mutations(mutations: &Vec<Element>, val: &String, buf: &mut Vec<String>
                 }
             },
             Element::Final { start_idx, end_idx } => {
-                fn apply_final(mutations: &Vec<Element>, val: &String, buf: &mut Vec<String>, pat: &str, start_idx: usize, end_idx: usize) {
+                fn apply_final(mutations: &Vec<Element>, val: &str, buf: &mut Vec<String>, pat: &str, start_idx: usize, end_idx: usize) {
                     let chunk_size = end_idx - start_idx;
                     if val.len() >= chunk_size && substring(val, 0, chunk_size) == substring(pat, start_idx, chunk_size) {
                         let val = String::from_iter(val.chars().skip(chunk_size));
