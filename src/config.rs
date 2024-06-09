@@ -258,6 +258,7 @@ const BRACE_TY_CURLY: usize = 2;
 impl Word {
 
     fn matches_braces(raw: &str, value: &str) -> bool {
+        // FIXME: recursive frame construction is buggy
         let braces = {
             let mut ctx = BraceCtx { resolved: vec![], stack: vec![] };
             let mut no_brace_start = usize::MAX;
@@ -336,7 +337,6 @@ impl Word {
         let mut attempts = vec![raw.to_string()];
         while !attempts.is_empty() {
             let val = attempts.remove(0);
-            println!("val: \"{val}\"");
             if val.is_empty() {
                 return true;
             }
@@ -392,7 +392,6 @@ impl Word {
 }
 
 fn apply_mutations(mutations: &Vec<Element>, val: &str, buf: &mut Vec<String>, pat: &str) {
-    // println!("pat: {pat}");
     println!("muts: {:?}", mutations);
     for m in mutations {
         match m {
@@ -405,10 +404,26 @@ fn apply_mutations(mutations: &Vec<Element>, val: &str, buf: &mut Vec<String>, p
                         apply_mutations(stack, val, buf, pat);
                     },
                     BRACE_TY_BRACKET => {
-
+                        // at least one match
+                        let len = buf.len();
+                        apply_mutations(stack, val, buf, pat);
+                        if buf.len() == len {
+                            // no match was found, so fail
+                            return;
+                        }
                     },
                     BRACE_TY_CURLY => {
-
+                        // at most one match
+                        let len = buf.len();
+                        apply_mutations(stack, val, buf, pat);
+                        println!("got curly {}|{}", buf.len(), len);
+                        if len + 1 < buf.len() {
+                            // more than one match was found, remove newly added attempts
+                            for _ in 0..(buf.len() - len) {
+                                buf.pop();
+                            }
+                            return;
+                        }
                     },
                     _ => unreachable!(),
                 }
@@ -416,18 +431,16 @@ fn apply_mutations(mutations: &Vec<Element>, val: &str, buf: &mut Vec<String>, p
             Element::Final { start_idx, end_idx } => {
                 fn apply_final(mutations: &Vec<Element>, val: &str, buf: &mut Vec<String>, pat: &str, start_idx: usize, end_idx: usize) {
                     let chunk_size = end_idx - start_idx;
-                    println!("long enough: {} 1 \"{}\" 2 \"{}\" need {} got {}", val.len() >= chunk_size, substring(val, 0, chunk_size), substring(pat, start_idx, chunk_size), chunk_size, val.len());
                     // FIXME: there is an off-by-one error somewhere here on the char cnt
                     if /*val.len() >= chunk_size && */substring(val, 0, chunk_size) == substring(pat, start_idx, chunk_size) {
                         let val = String::from_iter(val.chars().skip(chunk_size));
                         apply_mutations(mutations, &val, buf, pat);
+                        println!("pushed val");
                         buf.push(val.clone());
                     }
                 }
-                println!("try remove \"{}\"", substring(pat, *start_idx, *end_idx - *start_idx));
                 apply_final(mutations, val, buf, pat, *start_idx, *end_idx);
                 let trimmed = strip_whitespace(*start_idx, *end_idx - *start_idx, pat);
-                println!("try remove \"{}\"", substring(pat, trimmed.0, trimmed.1));
                 if trimmed.0 != *start_idx || trimmed.1 != (*end_idx - *start_idx) {
                     let (start_idx, len) = trimmed;
                     let end_idx = start_idx + len;
@@ -527,20 +540,31 @@ impl BraceCtx {
     }
 
     fn close_brace(&mut self) {
-        let mut i = 1;
-        while self.resolved.len() >= i {
+        for i in 1..(self.resolved.len() + 1) {
             let idx = self.resolved.len() - i;
             let elem = &mut self.resolved[idx];
             match elem {
                 Element::Frame { finished, .. } => {
                     if !*finished {
                         *finished = true;
+                        let brace = self.resolved.pop().unwrap();
+                        for elem in self.resolved.iter_mut().rev() {
+                            match elem {
+                                Element::Frame { stack, finished, .. } => {
+                                    if !*finished {
+                                        stack.push(brace);
+                                        return;
+                                    }
+                                },
+                                Element::Final { .. } => break,
+                            }
+                        }
+                        self.resolved.push(brace);
                         break;
                     }
                 },
                 Element::Final { .. } => unreachable!(),
             }
-            i += 1;
         }
     }
 
