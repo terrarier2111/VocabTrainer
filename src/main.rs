@@ -278,7 +278,6 @@ fn main() -> anyhow::Result<()> {
                             sets.push(set);
                         }
                     }
-                    _ => unreachable!(),
                 }
             }
         }

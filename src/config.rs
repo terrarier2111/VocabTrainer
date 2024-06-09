@@ -9,9 +9,7 @@ use std::{
 use rand::Rng;
 use serde_derive::{Deserialize, Serialize};
 
-use crate::{
-    dir, trim_whitespaces, utils::{count_occourances, four_to_pow, largest_pow_of_four}
-};
+use crate::dir;
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct LearnSetConfig {
@@ -149,7 +147,7 @@ impl Set {
         }
     }
 
-    /// safe the config on disk
+    /// save the config on disk
     pub fn save_cfg(&self) {
         let cfg = dir().join(&format!("{}.json", self.name));
         std::fs::File::create(cfg)
@@ -256,11 +254,13 @@ const BRACE_TY_BRACKET: usize = 1;
 const BRACE_TY_CURLY: usize = 2;
 
 impl Word {
-
     fn matches_braces(raw: &str, value: &str) -> bool {
         // FIXME: recursive frame construction is buggy
         let braces = {
-            let mut ctx = BraceCtx { resolved: vec![], stack: vec![] };
+            let mut ctx = BraceCtx {
+                resolved: vec![],
+                stack: vec![],
+            };
             let mut no_brace_start = usize::MAX;
             for (i, chr) in value.chars().enumerate() {
                 if chr == '(' {
@@ -268,21 +268,33 @@ impl Word {
                         ctx.push_text(no_brace_start, i);
                         no_brace_start = usize::MAX;
                     }
-                    ctx.resolved.push(Element::Frame { ty: BRACE_TY_ROUND, stack: vec![], finished: false, });
+                    ctx.resolved.push(Element::Frame {
+                        ty: BRACE_TY_ROUND,
+                        stack: vec![],
+                        finished: false,
+                    });
                     ctx.stack.push(BRACE_TY_ROUND);
                 } else if chr == '[' {
                     if no_brace_start != usize::MAX {
                         ctx.push_text(no_brace_start, i);
                         no_brace_start = usize::MAX;
                     }
-                    ctx.resolved.push(Element::Frame { ty: BRACE_TY_BRACKET, stack: vec![], finished: false, });
+                    ctx.resolved.push(Element::Frame {
+                        ty: BRACE_TY_BRACKET,
+                        stack: vec![],
+                        finished: false,
+                    });
                     ctx.stack.push(BRACE_TY_BRACKET);
                 } else if chr == '{' {
                     if no_brace_start != usize::MAX {
                         ctx.push_text(no_brace_start, i);
                         no_brace_start = usize::MAX;
                     }
-                    ctx.resolved.push(Element::Frame { ty: BRACE_TY_CURLY, stack: vec![], finished: false, });
+                    ctx.resolved.push(Element::Frame {
+                        ty: BRACE_TY_CURLY,
+                        stack: vec![],
+                        finished: false,
+                    });
                     ctx.stack.push(BRACE_TY_CURLY);
                 } else if chr == ')' {
                     if no_brace_start != usize::MAX {
@@ -320,7 +332,7 @@ impl Word {
         };
         let min_len = {
             let mut min_len = 0;
-            for m in braces.iter()  {
+            for m in braces.iter() {
                 if let Element::Final { start_idx, end_idx } = m {
                     min_len += *end_idx - *start_idx;
                 }
@@ -342,17 +354,17 @@ impl Word {
             }
             apply_mutations(&braces, &val, &mut attempts, value);
         }
-       false
+        false
     }
 
     pub fn matches(&self, raw: &str) -> bool {
         match self {
             // TODO: support other questioning modes!
-            Word::Order { key, value } => raw
+            Word::Order { key, .. } => raw
                 .parse::<usize>()
                 .map(|input| input == key.0)
                 .unwrap_or(false),
-            Word::KV { key, value } => {
+            Word::KV { value, .. } => {
                 match value.1 {
                     Amount::All => todo!(),
                     Amount::Any => value.0.iter().any(|value| {
@@ -395,14 +407,18 @@ fn apply_mutations(mutations: &Vec<Element>, val: &str, buf: &mut Vec<String>, p
     println!("muts: {:?}", mutations);
     for m in mutations {
         match m {
-            Element::Frame { ty, stack, finished } => {
+            Element::Frame {
+                ty,
+                stack,
+                finished,
+            } => {
                 if !*finished {
                     panic!("Incomplete parenthesis");
                 }
                 match *ty {
                     BRACE_TY_ROUND => {
                         apply_mutations(stack, val, buf, pat);
-                    },
+                    }
                     BRACE_TY_BRACKET => {
                         // at least one match
                         let len = buf.len();
@@ -411,7 +427,7 @@ fn apply_mutations(mutations: &Vec<Element>, val: &str, buf: &mut Vec<String>, p
                             // no match was found, so fail
                             return;
                         }
-                    },
+                    }
                     BRACE_TY_CURLY => {
                         // at most one match
                         let len = buf.len();
@@ -424,15 +440,24 @@ fn apply_mutations(mutations: &Vec<Element>, val: &str, buf: &mut Vec<String>, p
                             }
                             return;
                         }
-                    },
+                    }
                     _ => unreachable!(),
                 }
-            },
+            }
             Element::Final { start_idx, end_idx } => {
-                fn apply_final(mutations: &Vec<Element>, val: &str, buf: &mut Vec<String>, pat: &str, start_idx: usize, end_idx: usize) {
+                fn apply_final(
+                    mutations: &Vec<Element>,
+                    val: &str,
+                    buf: &mut Vec<String>,
+                    pat: &str,
+                    start_idx: usize,
+                    end_idx: usize,
+                ) {
                     let chunk_size = end_idx - start_idx;
                     // FIXME: there is an off-by-one error somewhere here on the char cnt
-                    if /*val.len() >= chunk_size && */substring(val, 0, chunk_size) == substring(pat, start_idx, chunk_size) {
+                    if
+                    /*val.len() >= chunk_size && */
+                    substring(val, 0, chunk_size) == substring(pat, start_idx, chunk_size) {
                         let val = String::from_iter(val.chars().skip(chunk_size));
                         apply_mutations(mutations, &val, buf, pat);
                         println!("pushed val");
@@ -446,7 +471,7 @@ fn apply_mutations(mutations: &Vec<Element>, val: &str, buf: &mut Vec<String>, p
                     let end_idx = start_idx + len;
                     apply_final(mutations, val, buf, pat, start_idx, end_idx);
                 }
-            },
+            }
         }
     }
 }
@@ -463,7 +488,10 @@ fn strip_whitespace(start_idx: usize, len: usize, val: &str) -> (usize, usize) {
         add_start += 1;
         sub_len += 1;
     }
-    let mut iter = val.chars().rev().skip(val.chars().size_hint().0 - (start_idx + len));
+    let mut iter = val
+        .chars()
+        .rev()
+        .skip(val.chars().size_hint().0 - (start_idx + len));
     loop {
         if !iter.next().map(|v| v.is_whitespace()).unwrap_or(false) {
             break;
@@ -508,14 +536,12 @@ fn char_size(chr: char) -> usize {
     // ((chr as u32).trailing_ones() as usize).max(1)
 }
 
-
 struct BraceCtx {
     resolved: Vec<Element>,
     stack: Vec<usize>,
 }
 
 impl BraceCtx {
-
     fn push_text(&mut self, start_idx: usize, end_idx: usize) {
         if self.resolved.is_empty() {
             self.resolved.push(Element::Final { start_idx, end_idx });
@@ -526,12 +552,14 @@ impl BraceCtx {
             let idx = self.resolved.len() - i;
             let elem = &mut self.resolved[idx];
             match elem {
-                Element::Frame { stack, finished, .. } => {
+                Element::Frame {
+                    stack, finished, ..
+                } => {
                     if !*finished {
                         stack.push(Element::Final { start_idx, end_idx });
                         return;
                     }
-                },
+                }
                 Element::Final { .. } => break,
             }
             i += 1;
@@ -550,24 +578,25 @@ impl BraceCtx {
                         let brace = self.resolved.pop().unwrap();
                         for elem in self.resolved.iter_mut().rev() {
                             match elem {
-                                Element::Frame { stack, finished, .. } => {
+                                Element::Frame {
+                                    stack, finished, ..
+                                } => {
                                     if !*finished {
                                         stack.push(brace);
                                         return;
                                     }
-                                },
+                                }
                                 Element::Final { .. } => break,
                             }
                         }
                         self.resolved.push(brace);
                         break;
                     }
-                },
+                }
                 Element::Final { .. } => unreachable!(),
             }
         }
     }
-
 }
 
 #[derive(Debug)]
@@ -678,11 +707,4 @@ pub struct MetaEntry {
     pub successes: usize,
     pub tries: usize,
     pub last_presented: usize,
-}
-
-#[derive(PartialEq, Debug)]
-enum Restriction {
-    None,
-    Min,
-    Max,
 }
