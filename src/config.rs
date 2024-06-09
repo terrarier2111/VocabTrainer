@@ -251,10 +251,9 @@ pub enum Word {
     },
 }
 
-const BRACE_TY_NO_BRACE: usize = 0;
-const BRACE_TY_ROUND: usize = 1;
-const BRACE_TY_BRACKET: usize = 2;
-const BRACE_TY_CURLY: usize = 3;
+const BRACE_TY_ROUND: usize = 0;
+const BRACE_TY_BRACKET: usize = 1;
+const BRACE_TY_CURLY: usize = 2;
 
 impl Word {
 
@@ -337,6 +336,7 @@ impl Word {
         let mut attempts = vec![raw.to_string()];
         while !attempts.is_empty() {
             let val = attempts.remove(0);
+            println!("val: \"{val}\"");
             if val.is_empty() {
                 return true;
             }
@@ -392,7 +392,7 @@ impl Word {
 }
 
 fn apply_mutations(mutations: &Vec<Element>, val: &str, buf: &mut Vec<String>, pat: &str) {
-    println!("pat: {pat}");
+    // println!("pat: {pat}");
     println!("muts: {:?}", mutations);
     for m in mutations {
         match m {
@@ -416,14 +416,18 @@ fn apply_mutations(mutations: &Vec<Element>, val: &str, buf: &mut Vec<String>, p
             Element::Final { start_idx, end_idx } => {
                 fn apply_final(mutations: &Vec<Element>, val: &str, buf: &mut Vec<String>, pat: &str, start_idx: usize, end_idx: usize) {
                     let chunk_size = end_idx - start_idx;
-                    if val.len() >= chunk_size && substring(val, 0, chunk_size) == substring(pat, start_idx, chunk_size) {
+                    println!("long enough: {} 1 \"{}\" 2 \"{}\" need {} got {}", val.len() >= chunk_size, substring(val, 0, chunk_size), substring(pat, start_idx, chunk_size), chunk_size, val.len());
+                    // FIXME: there is an off-by-one error somewhere here on the char cnt
+                    if /*val.len() >= chunk_size && */substring(val, 0, chunk_size) == substring(pat, start_idx, chunk_size) {
                         let val = String::from_iter(val.chars().skip(chunk_size));
                         apply_mutations(mutations, &val, buf, pat);
                         buf.push(val.clone());
                     }
                 }
+                println!("try remove \"{}\"", substring(pat, *start_idx, *end_idx - *start_idx));
                 apply_final(mutations, val, buf, pat, *start_idx, *end_idx);
                 let trimmed = strip_whitespace(*start_idx, *end_idx - *start_idx, pat);
+                println!("try remove \"{}\"", substring(pat, trimmed.0, trimmed.1));
                 if trimmed.0 != *start_idx || trimmed.1 != (*end_idx - *start_idx) {
                     let (start_idx, len) = trimmed;
                     let end_idx = start_idx + len;
