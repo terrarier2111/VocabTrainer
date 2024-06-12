@@ -485,3 +485,5 @@ enliving = belebend
 to herald = zu verkünden, anzukündigen
 edifice = Bauwerk, Gebäude
 divested = entkleidet, veräußert, beraubt, ausgegliedert
+myriad = Unzahl, Heerschar
+misgivings = Befürchtungen, Bedenken, Vorbehalte, Besorgnisse
